@@ -16,6 +16,7 @@ function buildAIPrompt(extraText) {
   "parts": [model 是 null 时必须填：{"name": "零件名", "path": "SVG path", "box": [x0, y0, x1, y1], "dir": "up / down / left / right"}],
   "sections": [
     {"part": "零件名", "rounds": 圈数, "text": "这几圈每圈怎么织", "sts": 织完针数或 null, "note": "可选"},
+    {"part": "零件名", "step": "不是织一圈的操作，比如 断线收口、缝合、挑针、穿到废线上", "note": "可选"},
     {"part": "零件名", "repeat": 重复次数, "start_sts": 这组开始前的针数或 null, "rows": [{"text": "组里第1圈怎么织", "change": 这圈加减几针}, ...], "note": "可选"}
   ],
   "notes": ["整体说明：线材、针号、起针方法、密度、尺寸等，每条简短"],
@@ -36,6 +37,7 @@ ${models}
 1. 连续几圈做法完全一样 → 第一种（rounds）。
 2. 几圈一组循环（比如"每3圈加2针，重复4次"）→ 第二种（repeat + rows），rows 每圈一条，change 是这圈加了几针（减针负数，不加减 0）。
 3. 按图解顺序，从起针到收针。不要拆成每圈一条。
+3b. 断线收口、缝合、藏线头、把针穿到废线上这种不用织一整圈的操作，用 step，不要算成圈。
 4. text 要短（25 个字以内），只写织的动作；换针、起针方法这些放进 note。note 只在真的需要时写，每条 40 字以内。notes 最多 6 条、每条 30 字以内；uncertain 最多 6 条。零件最多 8 个。用简单中文：k=下针，p=上针，k2tog=左上二并一，ssk=右上二并一，yo=挂针，m1L=左扭加针，m1R=右扭加针，kfb=一针里织两针，sl=滑针，tbl=扭针。片织写清楚正面还是反面。
 5. 图解只写长度（比如"织到5cm"）时，按密度换算成圈数，并在 note 写"约XXcm，按自己的手调整"。
 6. 不确定的地方不要猜：写进 uncertain，并在那一段的 note 里写"请对照原图确认：…"。
@@ -88,7 +90,9 @@ function applyAIResult(j) {
   for (const s of (j.sections || [])) {
     const note = zh(s.note);
     const flag = /确认|不确定|看不清/.test(note);
-    if (Array.isArray(s.rows) && s.rows.length && +s.repeat > 0) {
+    if (typeof s.step === 'string' && s.step.trim() && !(+s.rounds > 0)) {
+      secs.push({ type: 'step', part: fixPart(s.part), text: zh(s.step), note, flag });
+    } else if (Array.isArray(s.rows) && s.rows.length && +s.repeat > 0) {
       secs.push({
         type: 'group', part: fixPart(s.part), times: Math.min(+s.repeat, 500), start: num(s.start_sts),
         rows: s.rows.map(r => ({ text: zh(r.text) || '（没写做法）', change: num(r.change) || 0 })), note, flag,
@@ -143,7 +147,7 @@ async function runAI(e) {
       (r.notes.length ? `<h4 style="margin-top:6px">图解说明</h4>${r.notes.map(n => `<div>· ${esc(n)}</div>`).join('')}` : '');
     setShape(r.shapeKey);
     const sec = Math.round((Date.now() - t0) / 1000);
-    st.textContent = `读好了（用了 ${sec} 秒）：${r.secs.length} 段，一共 ${expandSections(cSections).length} 圈。下面检查一下，哪里不对直接改，没问题点「开始织」。`;
+    st.textContent = `读好了（用了 ${sec} 秒）：${r.secs.length} 段，${totalText()}。下面检查一下，哪里不对直接改，没问题点「开始织」。`;
     setSrc(mode === 'text' ? 'sections' : 'ai');
     if (mode === 'text') $('#aiStatus').textContent = '';
     ($('#aiNotes').hidden ? $('#shapeField') : $('#aiNotes')).scrollIntoView({ behavior: 'smooth', block: 'start' });

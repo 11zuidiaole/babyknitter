@@ -42,10 +42,9 @@ function renderHome() {
   ps.forEach(p => {
     const c = document.createElement('button');
     c.className = 'pcard';
-    const total = p.counter ? (p.target || '') : p.rows.length;
     const meta = p.counter
       ? `已织 ${p.done} 行${p.target ? ' / ' + p.target : ''}`
-      : (p.done >= total ? '织完啦' : `第 ${p.done + 1} / ${total} 圈 · ${p.rows[p.done]?.part || ''}`);
+      : (p.done >= p.rows.length ? '织完啦' : (p.rows[p.done].step ? `步骤：${p.rows[p.done].text}` : `第 ${roundNo(p.rows, p.done)} / ${roundCount(p.rows)} 圈 · ${p.rows[p.done].part || ''}`));
     c.innerHTML = `<div class="thumb"></div><h3>${esc(p.name)}</h3><div class="meta">${esc(meta)}</div>`;
     if (!p.counter) {
       const up = buildDiagram(c.querySelector('.thumb'), shapeOf(p), p.rows);
@@ -217,6 +216,10 @@ $$('#srcTabs button').forEach(b => b.addEventListener('click', () => setSrc(b.da
 function expandSections(secs) {
   const rows = [];
   secs.forEach((s, si) => {
+    if (s.type === 'step') {
+      rows.push({ part: s.part, text: s.text || '（没写做法）', sts: '', note: s.note || '', orig: '', sec: si, step: true });
+      return;
+    }
     if (s.type === 'group') {
       let run = s.start === '' || s.start == null || isNaN(+s.start) ? null : +s.start;
       const times = Math.min(Math.max(0, +s.times || 0), 500);
@@ -232,8 +235,9 @@ function expandSections(secs) {
   return rows;
 }
 function totalText() {
-  const n = expandSections(cSections).length;
-  return n ? `一共 ${n} 圈` : '';
+  const rows = expandSections(cSections);
+  const n = roundCount(rows), st = rows.length - n;
+  return rows.length ? `一共 ${n} 圈${st ? `，另外 ${st} 个步骤` : ''}` : '';
 }
 function touched() { cDirty = true; $('#secTotal').textContent = totalText(); clearTimeout(touched.t); touched.t = setTimeout(renderShapePreview, 300); }
 
@@ -260,7 +264,9 @@ function renderSections() {
       const d = document.createElement('div');
       d.className = 'sec-sum' + (s.flag ? ' flag' : '');
       let txt;
-      if (s.type === 'group') {
+      if (s.type === 'step') {
+        txt = `<b>${esc(s.part)}</b> · <span class="step-tag">步骤</span><div class="sum-t">${esc(s.text)}</div>`;
+      } else if (s.type === 'group') {
         const ch = s.rows.reduce((a, r) => a + (+r.change || 0), 0) * (+s.times || 0);
         const range = s.start !== '' && s.start != null && !isNaN(+s.start) ? ` · ${s.start}→${+s.start + ch}针` : '';
         txt = `<b>${esc(s.part)}</b> · ${s.rows.length}圈一组 × ${esc(s.times)}${range}<div class="sum-t">${s.rows.map(r => esc(r.text)).join(' / ')}</div>`;
@@ -307,6 +313,18 @@ function renderSections() {
       box.appendChild(g);
       return;
     }
+    if (s.type === 'step') {
+      const row = document.createElement('div');
+      row.className = 'step-row';
+      row.appendChild(partSelect(s));
+      row.insertAdjacentHTML('beforeend', `<span class="step-tag">步骤</span><input class="s-text" value="${esc(s.text)}" placeholder="比如：断线，穿过剩下的针拉紧">`);
+      row.querySelector('.s-text').addEventListener('input', e => { s.text = e.target.value; touched(); });
+      row.appendChild(xBtn('删掉这个步骤', del));
+      box.appendChild(row);
+      const cb = closeBtn(); cb.style.display = 'block'; cb.style.margin = '-2px 0 10px auto';
+      box.appendChild(cb);
+      return;
+    }
     const row = document.createElement('div');
     row.className = 'sec-row' + (s.flag ? ' flag' : '');
     row.appendChild(partSelect(s));
@@ -328,6 +346,10 @@ function renderSections() {
 const lastPart = () => (cSections[cSections.length - 1] || {}).part || SHAPES[cShape].parts[0].name;
 $('#addSection').addEventListener('click', () => {
   cSections.push({ type: 'plain', part: lastPart(), count: 10, text: '全部下针', sts: '', _open: true });
+  touched(); renderSections();
+});
+$('#addStep').addEventListener('click', () => {
+  cSections.push({ type: 'step', part: lastPart(), text: '', _open: true });
   touched(); renderSections();
 });
 $('#addGroup').addEventListener('click', () => {
@@ -454,7 +476,8 @@ function sectionsOf(rows) {
   out.forEach(sec => {
     const r = rows[sec.start];
     const n = sec.end - sec.start + 1;
-    sec.label = sec.group ? `${sec.group.len} 圈一组 × ${sec.group.times}` : (n > 1 ? `${n} 圈：${r.text}` : r.text);
+    sec.step = !!r.step;
+    sec.label = r.step ? `步骤：${r.text}` : sec.group ? `${sec.group.len} 圈一组 × ${sec.group.times}` : (n > 1 ? `${n} 圈：${r.text}` : r.text);
   });
   return out;
 }
@@ -478,12 +501,13 @@ function renderKnit() {
   updateDiagram(i);
   updateAllRows();
   $('#kBar').style.width = (i / N * 100) + '%';
-  $('#kTotal').textContent = `总共第 ${Math.min(i + 1, N)} / ${N} 圈`;
+  const NR = roundCount(p.rows);
+  $('#kTotal').textContent = `总共第 ${Math.min(roundNo(p.rows, i) + (p.rows[i] && p.rows[i].step ? 1 : 0), NR)} / ${NR} 圈`;
   if (i >= N) {
     $('#kSec').textContent = '';
     $('#kNum').textContent = '织完啦';
     $('#kText').textContent = '全部圈都完成了。';
-    $('#kTotal').textContent = `一共 ${N} 圈`;
+    $('#kTotal').textContent = `一共 ${NR} 圈`;
     ['#kGrp', '#kOrig', '#kNote', '#kSts', '#kNext'].forEach(s => $(s).textContent = '');
     card.classList.remove('changed');
     return;
@@ -493,11 +517,13 @@ function renderKnit() {
   const sec = knitSecs[si];
   const inSec = i - sec.start + 1, secLen = sec.end - sec.start + 1;
   $('#kSec').textContent = `${r.part} · 第 ${si + 1} / ${knitSecs.length} 段`;
-  $('#kNum').textContent = `这段第 ${inSec} / ${secLen} 圈`;
+  $('#kNum').textContent = r.step ? '步骤' : `这段第 ${inSec} / ${secLen} 圈`;
+  card.classList.toggle('step', !!r.step);
+  $('#doneBtn').textContent = r.step ? '做完了 ✓' : '织完这圈 ✓';
   $('#kGrp').textContent = r.g ? `第 ${r.g[0] + 1} / ${r.g[1]} 组 · 组里第 ${r.g[2] + 1} / ${r.g[3]} 圈` : '';
   const prev = p.rows[i - 1];
   // 组里每圈本来就轮流变，只在加减针那圈或者新的一段开始时提醒
-  const changed = i > 0 && prev.text !== r.text &&
+  const changed = !r.step && i > 0 && prev.text !== r.text &&
     (!r.g || (r.g[0] === 0 && r.g[2] === 0) || (r.sts !== '' && prev.sts !== '' && r.sts !== prev.sts));
   card.classList.toggle('changed', changed);
   $('#kText').textContent = r.text;
@@ -505,9 +531,10 @@ function renderKnit() {
   $('#kNote').textContent = r.note || '';
   $('#kSts').textContent = r.sts !== '' && r.sts != null ? `织完应该是 ${r.sts} 针` : '';
   const nx = p.rows[i + 1];
-  let nextTxt = '这是最后一圈';
+  let nextTxt = r.step ? '做完点一下继续' : '这是最后一圈';
   if (nx) {
-    if (i === sec.end) nextTxt = `这段最后一圈。下一段：${nx.part !== r.part ? '【' + nx.part + '】' : ''}${knitSecs[si + 1].label}`;
+    if (nx.step) nextTxt = `${r.step ? '下一个' : '织完这圈以后'}步骤：${nx.text}`;
+    else if (i === sec.end) nextTxt = `这段最后一圈。下一段：${nx.part !== r.part ? '【' + nx.part + '】' : ''}${knitSecs[si + 1].label}`;
     else nextTxt = `下一圈：${nx.text}`;
   }
   $('#kNext').textContent = nextTxt;
@@ -578,7 +605,7 @@ function renderAllRows() {
       const r = cur.rows[i];
       const row = document.createElement('div');
       row.className = 'ar-row';
-      const pos = r.g ? `组${r.g[0] + 1}·${r.g[2] + 1}` : `${i - sec.start + 1}/${n}`;
+      const pos = r.step ? '步骤' : r.g ? `组${r.g[0] + 1}·${r.g[2] + 1}` : `${i - sec.start + 1}/${n}`;
       row.innerHTML = `<span class="n">${pos}</span><span class="t">${esc(r.text)}</span><span class="s">${r.sts !== '' && r.sts != null ? '→ ' + r.sts + '针' : ''}</span>`;
       row.addEventListener('click', () => openRowDialog(i));
       d.appendChild(row);

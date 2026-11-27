@@ -117,7 +117,7 @@ function buildDiagram(container, shapeKey, rows) {
 
   shape.parts.forEach((part, pi) => {
     const idx = [];
-    rows.forEach((r, i) => { if (r.part === part.name) idx.push(i); });
+    rows.forEach((r, i) => { if (r.part === part.name && !r.step) idx.push(i); });
     const cp = el('clipPath', { id: uid + pi }, defs);
     el('path', { d: part.path }, cp);
     const g = el('g', { 'clip-path': `url(#${uid}${pi})` }, svg);
@@ -155,7 +155,7 @@ function buildBars(container, rows) {
   rows.forEach((r, i) => {
     let g = groups[groups.length - 1];
     if (!g || g.name !== r.part) { g = { name: r.part, idx: [] }; groups.push(g); }
-    g.idx.push(i);
+    if (!r.step) g.idx.push(i);
   });
   const cells = new Array(rows.length);
   groups.forEach((g, gi) => {
@@ -206,3 +206,7 @@ function fitShape(parts) {
   const pad = 10, labelW = 90;
   return `${x0 - labelW} ${y0 - pad} ${x1 - x0 + labelW * 2} ${y1 - y0 + pad * 2}`;
 }
+
+// 步骤（断线、缝合这种）不算圈
+function roundCount(rows) { return rows.filter(r => !r.step).length; }
+function roundNo(rows, i) { let n = 0; for (let j = 0; j <= i && j < rows.length; j++) if (!rows[j].step) n++; return n; }
