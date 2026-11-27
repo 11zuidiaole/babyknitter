@@ -160,19 +160,19 @@ $$('#srcTabs button').forEach(b => b.addEventListener('click', () => setSrc(b.da
 // 分段 → 一圈一圈
 function expandSections(secs) {
   const rows = [];
-  for (const s of secs) {
+  secs.forEach((s, si) => {
     if (s.type === 'group') {
       let run = s.start === '' || s.start == null || isNaN(+s.start) ? null : +s.start;
       const times = Math.min(Math.max(0, +s.times || 0), 500);
       for (let t = 0; t < times; t++) s.rows.forEach((r, j) => {
         if (run !== null) run += (+r.change || 0);
-        rows.push({ part: s.part, text: r.text || '（没写做法）', sts: run === null ? '' : run, note: t === 0 && j === 0 ? (s.note || '') : '', orig: '' });
+        rows.push({ part: s.part, text: r.text || '（没写做法）', sts: run === null ? '' : run, note: t === 0 && j === 0 ? (s.note || '') : '', orig: '', sec: si, g: [t, times, j, s.rows.length] });
       });
     } else {
       const n = Math.min(Math.max(0, +s.count || 0), 2000);
-      for (let i = 0; i < n; i++) rows.push({ part: s.part, text: s.text || '（没写做法）', sts: s.sts === '' || s.sts == null ? '' : +s.sts, note: i === 0 ? (s.note || '') : '', orig: '' });
+      for (let i = 0; i < n; i++) rows.push({ part: s.part, text: s.text || '（没写做法）', sts: s.sts === '' || s.sts == null ? '' : +s.sts, note: i === 0 ? (s.note || '') : '', orig: '', sec: si });
     }
-  }
+  });
   return rows;
 }
 function totalText() {
@@ -365,6 +365,24 @@ function openKnit(id) {
   renderKImgs();
 }
 
+// 把一圈一圈按段分好：有 sec 用 sec，没有就把连续做法一样的圈合成一段
+function sectionsOf(rows) {
+  const out = [];
+  rows.forEach((r, i) => {
+    const key = r.sec != null ? 's' + r.sec : 'p' + r.part + '|' + r.text;
+    const last = out[out.length - 1];
+    if (last && last.key === key) last.end = i;
+    else out.push({ key, start: i, end: i, part: r.part, group: r.g ? { times: r.g[1], len: r.g[3] } : null });
+  });
+  out.forEach(sec => {
+    const r = rows[sec.start];
+    const n = sec.end - sec.start + 1;
+    sec.label = sec.group ? `${sec.group.len} 圈一组 × ${sec.group.times}` : (n > 1 ? `${n} 圈：${r.text}` : r.text);
+  });
+  return out;
+}
+let knitSecs = [];
+
 function renderKnit() {
   const p = cur;
   const card = $('#card');
@@ -372,7 +390,7 @@ function renderKnit() {
     $('#kSec').textContent = '只计数';
     $('#kNum').textContent = p.done;
     $('#kText').textContent = p.target ? `目标 ${p.target} 行` : '';
-    ['#kOrig', '#kNote', '#kSts', '#kNext'].forEach(s => $(s).textContent = '');
+    ['#kGrp', '#kOrig', '#kNote', '#kSts', '#kNext'].forEach(s => $(s).textContent = '');
     $('#kBar').style.width = p.target ? Math.min(100, p.done / p.target * 100) + '%' : '0';
     $('#kTotal').textContent = p.target && p.done >= p.target ? '到目标啦' : '';
     card.classList.remove('changed');
@@ -383,28 +401,39 @@ function renderKnit() {
   updateDiagram(i);
   updateAllRows();
   $('#kBar').style.width = (i / N * 100) + '%';
-  $('#kTotal').textContent = `已织 ${i} / ${N} 圈`;
+  $('#kTotal').textContent = `总共第 ${Math.min(i + 1, N)} / ${N} 圈`;
   if (i >= N) {
     $('#kSec').textContent = '';
     $('#kNum').textContent = '织完啦';
     $('#kText').textContent = '全部圈都完成了。';
-    ['#kOrig', '#kNote', '#kSts', '#kNext'].forEach(s => $(s).textContent = '');
+    $('#kTotal').textContent = `一共 ${N} 圈`;
+    ['#kGrp', '#kOrig', '#kNote', '#kSts', '#kNext'].forEach(s => $(s).textContent = '');
     card.classList.remove('changed');
     return;
   }
   const r = p.rows[i];
-  let k = 0, tot = 0;
-  p.rows.forEach((x, j) => { if (x.part === r.part) { tot++; if (j <= i) k++; } });
-  $('#kSec').textContent = `${r.part} · 这部分第 ${k} / ${tot} 圈`;
-  $('#kNum').textContent = `第 ${i + 1} 圈`;
-  const changed = i > 0 && p.rows[i - 1].text !== r.text;
+  const si = knitSecs.findIndex(x => i >= x.start && i <= x.end);
+  const sec = knitSecs[si];
+  const inSec = i - sec.start + 1, secLen = sec.end - sec.start + 1;
+  $('#kSec').textContent = `${r.part} · 第 ${si + 1} / ${knitSecs.length} 段`;
+  $('#kNum').textContent = `这段第 ${inSec} / ${secLen} 圈`;
+  $('#kGrp').textContent = r.g ? `第 ${r.g[0] + 1} / ${r.g[1]} 组 · 组里第 ${r.g[2] + 1} / ${r.g[3]} 圈` : '';
+  const prev = p.rows[i - 1];
+  // 组里每圈本来就轮流变，只在加减针那圈或者新的一段开始时提醒
+  const changed = i > 0 && prev.text !== r.text &&
+    (!r.g || (r.g[0] === 0 && r.g[2] === 0) || (r.sts !== '' && prev.sts !== '' && r.sts !== prev.sts));
   card.classList.toggle('changed', changed);
-  $('#kText').textContent = (changed ? '注意，这圈不一样：' : '') + r.text;
+  $('#kText').textContent = r.text;
   $('#kOrig').textContent = r.orig ? '原文：' + r.orig : '';
   $('#kNote').textContent = r.note || '';
   $('#kSts').textContent = r.sts !== '' && r.sts != null ? `织完应该是 ${r.sts} 针` : '';
   const nx = p.rows[i + 1];
-  $('#kNext').textContent = nx ? `下一圈：${nx.part !== r.part ? '【' + nx.part + '】' : ''}${nx.text}` : '这是最后一圈';
+  let nextTxt = '这是最后一圈';
+  if (nx) {
+    if (i === sec.end) nextTxt = `这段最后一圈。下一段：${nx.part !== r.part ? '【' + nx.part + '】' : ''}${knitSecs[si + 1].label}`;
+    else nextTxt = `下一圈：${nx.text}`;
+  }
+  $('#kNext').textContent = nextTxt;
 }
 
 function step(d) {
@@ -441,34 +470,45 @@ document.addEventListener('keydown', e => {
   else if (back.includes(e.key)) { e.preventDefault(); step(-1); }
 });
 
-// 全部圈列表
-let rowEls = [];
+// 全部圈列表（按段，点开看每一圈）
+let rowEls = [], secEls = [];
 function renderAllRows() {
   const box = $('#allRows');
   box.innerHTML = '';
-  rowEls = [];
+  rowEls = []; secEls = [];
+  knitSecs = sectionsOf(cur.rows);
   if (cur.notes && cur.notes.length) {
     const n = document.createElement('div');
     n.className = 'muted';
     n.style.margin = '10px 0';
-    n.textContent = '说明：' + cur.notes.join(' ');
+    n.innerHTML = cur.notes.map(x => esc(x)).join('<br>');
     box.appendChild(n);
   }
   let lastPart = null;
-  cur.rows.forEach((r, i) => {
-    if (r.part !== lastPart) {
+  knitSecs.forEach((sec, si) => {
+    if (sec.part !== lastPart) {
       const h = document.createElement('div');
       h.className = 'ar-part';
-      h.textContent = r.part;
+      h.textContent = sec.part;
       box.appendChild(h);
-      lastPart = r.part;
+      lastPart = sec.part;
     }
-    const d = document.createElement('div');
-    d.className = 'ar-row';
-    d.innerHTML = `<span class="n">第${i + 1}圈</span><span class="t">${esc(r.text)}</span><span class="s">${r.sts !== '' && r.sts != null ? '→ ' + r.sts + '针' : ''}</span>`;
-    d.addEventListener('click', () => openRowDialog(i));
+    const d = document.createElement('details');
+    d.className = 'ar-sec';
+    const n = sec.end - sec.start + 1;
+    d.innerHTML = `<summary><span class="n">第${si + 1}段</span><span class="t">${esc(sec.label)}</span><span class="s"></span></summary>`;
+    for (let i = sec.start; i <= sec.end; i++) {
+      const r = cur.rows[i];
+      const row = document.createElement('div');
+      row.className = 'ar-row';
+      const pos = r.g ? `组${r.g[0] + 1}·${r.g[2] + 1}` : `${i - sec.start + 1}/${n}`;
+      row.innerHTML = `<span class="n">${pos}</span><span class="t">${esc(r.text)}</span><span class="s">${r.sts !== '' && r.sts != null ? '→ ' + r.sts + '针' : ''}</span>`;
+      row.addEventListener('click', () => openRowDialog(i));
+      d.appendChild(row);
+      rowEls[i] = row;
+    }
     box.appendChild(d);
-    rowEls.push(d);
+    secEls.push({ el: d, sec, prog: d.querySelector('summary .s') });
   });
 }
 function updateAllRows() {
@@ -476,13 +516,23 @@ function updateAllRows() {
     d.classList.toggle('done', i < cur.done);
     d.classList.toggle('cur', i === cur.done);
   });
+  secEls.forEach(({ el, sec, prog }) => {
+    const n = sec.end - sec.start + 1;
+    const k = Math.max(0, Math.min(n, cur.done - sec.start));
+    prog.textContent = k >= n ? '✓ 织完' : `${k} / ${n}`;
+    el.classList.toggle('done', k >= n);
+    const isCur = cur.done >= sec.start && cur.done <= sec.end;
+    el.classList.toggle('cur', isCur);
+    if (isCur && !el.dataset.seen) { el.open = true; el.dataset.seen = '1'; el.dataset.auto = '1'; }
+    if (!isCur && el.dataset.auto) { el.open = false; delete el.dataset.auto; }
+  });
 }
 
 let editing = -1;
 function openRowDialog(i) {
   editing = i;
   const r = cur.rows[i];
-  $('#rdTitle').textContent = `第 ${i + 1} 圈 · ${r.part}`;
+  $('#rdTitle').textContent = `总第 ${i + 1} 圈 · ${r.part}`;
   $('#rdText').value = r.text;
   $('#rdSts').value = r.sts ?? '';
   $('#rowDialog').showModal();
