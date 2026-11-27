@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>babyknitter · 编织计数</title>
+<meta name="theme-color" content="#f7f2ea">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='40' fill='%232f7d6d'/><path d='M20 40Q50 20 80 40M18 55Q50 35 82 55M22 70Q50 50 78 70' stroke='%23f7f2ea' stroke-width='5' fill='none'/></svg>">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- 首页：项目列表 -->
+<section id="home" class="view">
+  <header class="topbar">
+    <h1 class="logo">babyknitter</h1>
+    <button class="btn primary" id="newBtn">＋ 新作品</button>
+  </header>
+  <div id="projectList" class="project-list"></div>
+  <div id="emptyHome" class="empty" hidden>
+    <p>还没有作品。点右上角「新作品」开始。</p>
+  </div>
+  <footer class="home-foot">
+    <button class="link" id="exportBtn">导出备份</button>
+    <label class="link">导入备份<input type="file" id="importFile" accept=".json" hidden></label>
+    <span class="muted">进度只存在这个浏览器里，换设备前记得导出。</span>
+  </footer>
+</section>
+
+<!-- 新建作品 -->
+<section id="create" class="view" hidden>
+  <header class="topbar">
+    <button class="btn ghost" data-go="home">← 返回</button>
+    <h2>新作品</h2>
+    <span></span>
+  </header>
+
+  <div class="form">
+    <label class="field">
+      <span>名字</span>
+      <input id="fName" placeholder="比如：给妈妈的袜子">
+    </label>
+
+    <div class="field">
+      <span>形状</span>
+      <div id="shapePicker" class="chips"></div>
+    </div>
+
+    <div class="field">
+      <span>图解怎么来</span>
+      <div class="tabs" id="srcTabs">
+        <button data-src="sections" class="on">分段填写</button>
+        <button data-src="paste">粘贴文字</button>
+        <button data-src="count">只计数</button>
+      </div>
+    </div>
+
+    <!-- 分段填写 -->
+    <div class="src" data-src="sections">
+      <p class="hint">每一段是连续几圈做法一样的部分。部位决定它在示意图上亮哪里。</p>
+      <div id="sectionList"></div>
+      <div class="row-btns">
+        <button class="btn" id="addSection">＋ 加一段</button>
+        <button class="btn" id="openGen">＋ 加减针生成器</button>
+      </div>
+
+      <div id="genBox" class="gen" hidden>
+        <p class="hint">例子：34针起，每3圈加2针（在第3圈加），一直加到42针。</p>
+        <div class="gen-grid">
+          <label>部位<select id="gPart"></select></label>
+          <label>起始针数<input id="gStart" type="number" value="34"></label>
+          <label>每几圈一组<input id="gEvery" type="number" value="3"></label>
+          <label>每组加几针<input id="gChange" type="number" value="2"><small>减针就填负数</small></label>
+          <label>加到几针<input id="gTarget" type="number" value="42"></label>
+          <label>加针在<select id="gWhere"><option value="last">每组最后一圈</option><option value="first">每组第一圈</option></select></label>
+          <label class="wide">普通圈做法<input id="gPlain" value="全部下针"></label>
+          <label class="wide">加减针那圈做法<input id="gChangeText" value="两侧各加1针"></label>
+        </div>
+        <div class="row-btns">
+          <button class="btn primary" id="genAdd">生成并加进去</button>
+          <button class="btn ghost" id="genClose">取消</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 粘贴文字 -->
+    <div class="src" data-src="paste" hidden>
+      <p class="hint">支持这些写法，一行一圈：<br>
+        <code>第1圈：全部下针 → 34针</code> · <code>第4-6圈：全部下针</code> · <code>Rnd 3: k2tog, k to end (32 sts)</code> · <code>Rows 1–10: k1, p1</code> · <code>1 | 全部下针 | 34</code><br>
+        单独一行写部位名（比如 <code>【袜筒】</code> 或 <code>Heel</code>）会把下面的圈归到那个部位。<code>重复第1-3圈共5次</code> / <code>Repeat rnds 1-3 4 more times</code> 会自动展开。</p>
+      <textarea id="pasteText" rows="10" placeholder="把图解文字贴在这里"></textarea>
+      <label class="check"><input type="checkbox" id="doTranslate" checked> 把英文缩写翻译成中文</label>
+      <div id="pastePreview" class="preview"></div>
+    </div>
+
+    <!-- 只计数 -->
+    <div class="src" data-src="count" hidden>
+      <p class="hint">不用图解，就数行数。</p>
+      <label class="field inline"><span>目标行数（可以不填）</span><input id="countTarget" type="number" placeholder="比如 120"></label>
+    </div>
+
+    <div class="form-foot">
+      <span id="createError" class="error"></span>
+      <button class="btn primary big" id="saveProject">开始织</button>
+    </div>
+  </div>
+</section>
+
+<!-- 编织模式 -->
+<section id="knit" class="view" hidden>
+  <header class="topbar">
+    <button class="btn ghost" data-go="home">← 作品</button>
+    <h2 id="kName"></h2>
+    <div class="menu-wrap">
+      <button class="btn ghost" id="menuBtn" aria-label="更多">⋯</button>
+      <div class="menu" id="menu" hidden>
+        <button id="mReset">进度清零</button>
+        <button id="mRename">改名字</button>
+        <button id="mDelete" class="danger">删除作品</button>
+      </div>
+    </div>
+  </header>
+
+  <div id="stage" class="stage">
+    <div id="diagram" class="diagram-wrap"></div>
+    <div class="card" id="card">
+      <div class="card-sec" id="kSec"></div>
+      <div class="card-num" id="kNum"></div>
+      <div class="card-text" id="kText"></div>
+      <div class="card-orig" id="kOrig"></div>
+      <div class="card-note" id="kNote"></div>
+      <div class="card-sts" id="kSts"></div>
+      <div class="card-next" id="kNext"></div>
+      <div class="progress"><span id="kBar"></span></div>
+      <div class="card-total" id="kTotal"></div>
+      <div class="card-btns">
+        <button class="btn" id="undoBtn">撤销</button>
+        <button class="btn primary big" id="doneBtn">织完这圈 ✓</button>
+      </div>
+      <div class="card-hint">点这片区域任意地方、按空格 / Enter / → 键，或者踩翻页踏板，都算织完一圈。撤销：← 或 Backspace。</div>
+      <div class="card-status" id="wakeStatus"></div>
+    </div>
+  </div>
+
+  <details class="all-rows" id="allRowsBox">
+    <summary>全部圈（点一圈可以跳过去或修改）</summary>
+    <div id="allRows"></div>
+  </details>
+</section>
+
+<!-- 修改一圈 -->
+<dialog id="rowDialog">
+  <form method="dialog" class="dlg">
+    <h3 id="rdTitle"></h3>
+    <label class="field"><span>做法</span><textarea id="rdText" rows="3"></textarea></label>
+    <label class="field inline"><span>织完针数</span><input id="rdSts" type="number"></label>
+    <div class="row-btns">
+      <button class="btn" value="jump" id="rdJump">跳到这圈</button>
+      <button class="btn primary" value="save">保存</button>
+      <button class="btn ghost" value="cancel">取消</button>
+    </div>
+  </form>
+</dialog>
+
+<div id="flash" class="flash"></div>
+
+<script src="js/shapes.js"></script>
+<script src="js/parser.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
