@@ -58,6 +58,7 @@ function validPart(p) {
 
 const num = v => (v === null || v === undefined || v === '' || !isFinite(+v)) ? '' : +v;
 const str = v => String(v ?? '').replace(/\s+/g, ' ').trim();
+const zh = v => { const t = str(v); return hasEnglish(t) ? translate(t) : t; };
 
 // AI 的 JSON → 形状 + 分段
 function applyAIResult(j) {
@@ -85,15 +86,15 @@ function applyAIResult(j) {
 
   const secs = [];
   for (const s of (j.sections || [])) {
-    const note = str(s.note);
+    const note = zh(s.note);
     const flag = /确认|不确定|看不清/.test(note);
     if (Array.isArray(s.rows) && s.rows.length && +s.repeat > 0) {
       secs.push({
         type: 'group', part: fixPart(s.part), times: Math.min(+s.repeat, 500), start: num(s.start_sts),
-        rows: s.rows.map(r => ({ text: str(r.text) || '（没写做法）', change: num(r.change) || 0 })), note, flag,
+        rows: s.rows.map(r => ({ text: zh(r.text) || '（没写做法）', change: num(r.change) || 0 })), note, flag,
       });
     } else if (+s.rounds > 0) {
-      secs.push({ type: 'plain', part: fixPart(s.part), count: Math.min(+s.rounds, 2000), text: str(s.text) || '（没写做法）', sts: num(s.sts), note, flag });
+      secs.push({ type: 'plain', part: fixPart(s.part), count: Math.min(+s.rounds, 2000), text: zh(s.text) || '（没写做法）', sts: num(s.sts), note, flag });
     }
   }
   return { shapeKey, secs, name: str(j.name), notes: (j.notes || []).map(str).filter(Boolean), uncertain: (j.uncertain || []).map(str).filter(Boolean) };
