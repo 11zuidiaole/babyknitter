@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <rect width="1024" height="1024" fill="#f4ecdf"/>
+  <!-- needles behind the ball -->
+  <g stroke-linecap="round">
+    <line x1="250" y1="250" x2="820" y2="790" stroke="#b98552" stroke-width="34"/>
+    <line x1="774" y1="250" x2="204" y2="790" stroke="#c99563" stroke-width="34"/>
+  </g>
+  <circle cx="240" cy="240" r="46" fill="#e5866a"/>
+  <circle cx="784" cy="240" r="46" fill="#e5866a"/>
+  <!-- yarn ball -->
+  <circle cx="512" cy="560" r="270" fill="#2f7d6d"/>
+  <clipPath id="ball"><circle cx="512" cy="560" r="270"/></clipPath>
+  <g clip-path="url(#ball)" fill="none" stroke="#5fb39c" stroke-width="22" stroke-linecap="round">
+    <path d="M250 470 Q512 380 790 520"/>
+    <path d="M240 560 Q512 460 800 610"/>
+    <path d="M260 650 Q512 550 780 700"/>
+    <path d="M300 740 Q512 650 740 780"/>
+    <path d="M610 300 Q470 560 640 830"/>
+    <path d="M700 330 Q570 560 730 790"/>
+  </g>
+  <g fill="none" stroke="#f4ecdf" stroke-width="20" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M405 455 L437 503 L469 455"/>
+    <path d="M405 513 L437 561 L469 513"/>
+    <path d="M405 571 L437 619 L469 571"/>
+    <path d="M405 629 L437 677 L469 629"/>
+    <path d="M480 455 L512 503 L544 455"/>
+    <path d="M480 513 L512 561 L544 513"/>
+    <path d="M480 571 L512 619 L544 571"/>
+    <path d="M480 629 L512 677 L544 629"/>
+    <path d="M555 455 L587 503 L619 455"/>
+    <path d="M555 513 L587 561 L619 513"/>
+    <path d="M555 571 L587 619 L619 571"/>
+    <path d="M555 629 L587 677 L619 629"/>
+  </g>
+  <!-- loose strand -->
+  <path d="M700 760 Q800 860 700 900 Q620 930 560 880" fill="none" stroke="#2f7d6d" stroke-width="22" stroke-linecap="round"/>
+</svg>
