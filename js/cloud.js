@@ -43,7 +43,15 @@ const Cloud = (() => {
       if (!q || (p.updated || 0) > (q.updated || 0)) map.set(p.id, p);
     }
     const projects = [...map.values()].filter(p => !(deleted[p.id] >= (p.updated || 0)));
-    return { projects, deleted };
+    const deletedModels = { ...(a.deletedModels || {}) };
+    for (const [k, v] of Object.entries((b && b.deletedModels) || {})) deletedModels[k] = Math.max(deletedModels[k] || 0, v);
+    const mm = new Map();
+    for (const m of [...(a.models || []), ...((b && b.models) || [])]) {
+      const q = mm.get(m.id);
+      if (!q || (m.updated || 0) > (q.updated || 0)) mm.set(m.id, m);
+    }
+    const models = [...mm.values()].filter(m => !(deletedModels[m.id] >= (m.updated || 0)));
+    return { projects, deleted, models, deletedModels };
   }
 
   async function pullMerge() {
@@ -56,6 +64,9 @@ const Cloud = (() => {
       const merged = merge(data, row ? row.data : null);
       data.projects = merged.projects;
       data.deleted = merged.deleted;
+      data.models = merged.models;
+      data.deletedModels = merged.deletedModels;
+      registerModels();
       localSave();
       refreshViews();
       await pushNow();
@@ -71,7 +82,7 @@ const Cloud = (() => {
     clearTimeout(pushTimer);
     const { error } = await sb.from(T_BOARD).upsert({
       user_id: user.id,
-      data: { projects: data.projects, deleted: data.deleted || {} },
+      data: { projects: data.projects, deleted: data.deleted || {}, models: data.models || [], deletedModels: data.deletedModels || {} },
       updated_at: new Date().toISOString(),
     });
     if (error) { setStatus('同步失败：' + error.message); return; }

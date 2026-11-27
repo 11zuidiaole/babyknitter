@@ -110,6 +110,8 @@ function buildDiagram(container, shapeKey, rows) {
   if (!shape.viewBox) return buildBars(container, rows);
 
   const svg = el('svg', { viewBox: shape.viewBox, class: 'diagram', role: 'img', 'aria-label': shape.name + '进度图' }, container);
+  const vbw = +shape.viewBox.split(/\s+/)[2] || 400;
+  const fs = Math.max(12, Math.round(vbw / 24));
   const defs = el('defs', {}, svg);
   const uid = 'c' + Math.random().toString(36).slice(2, 8);
 
@@ -130,7 +132,7 @@ function buildDiagram(container, shapeKey, rows) {
     }
     el('path', { d: part.path, class: 'outline' }, svg);
     if (part.label) {
-      const t = el('text', { x: part.label[0], y: part.label[1], class: 'plabel' }, svg);
+      const t = el('text', { x: part.label[0], y: part.label[1], class: 'plabel', 'font-size': fs }, svg);
       t.textContent = part.name;
     }
   });
@@ -181,4 +183,26 @@ function buildBars(container, rows) {
 
 function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// ---------- 我的模型 ----------
+// 用户存的形状放在 data.models，注册进 SHAPES，key 是 "m:<id>"
+function registerModels() {
+  Object.keys(SHAPES).forEach(k => { if (k.startsWith('m:')) delete SHAPES[k]; });
+  ((typeof data !== 'undefined' && data.models) || []).forEach(m => {
+    SHAPES['m:' + m.id] = { name: m.name, viewBox: m.viewBox, parts: m.parts, defaults: [], mine: true };
+  });
+}
+
+// 根据零件外框算 viewBox，顺便放好零件名字
+function fitShape(parts) {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  parts.forEach(p => { x0 = Math.min(x0, p.box[0]); y0 = Math.min(y0, p.box[1]); x1 = Math.max(x1, p.box[2]); y1 = Math.max(y1, p.box[3]); });
+  const cx = (x0 + x1) / 2;
+  parts.forEach(p => {
+    const right = (p.box[0] + p.box[2]) / 2 >= cx;
+    p.label = right ? [p.box[2] + 6, (p.box[1] + p.box[3]) / 2 + 5] : [p.box[0] - 6 - p.name.length * 15, (p.box[1] + p.box[3]) / 2 + 5];
+  });
+  const pad = 10, labelW = 90;
+  return `${x0 - labelW} ${y0 - pad} ${x1 - x0 + labelW * 2} ${y1 - y0 + pad * 2}`;
 }

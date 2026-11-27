@@ -1,6 +1,7 @@
 // ---------- 存储 ----------
 const KEY = 'babyknitter.v1';
 let data = load();
+if (!data.models) data.models = [];
 
 function load() {
   try { return JSON.parse(localStorage.getItem(KEY)) || { projects: [] }; }
@@ -112,21 +113,74 @@ $('#newBtn').addEventListener('click', () => {
 });
 
 function renderShapePicker() {
-  const box = $('#shapePicker');
+  const sel = $('#shapeSelect');
+  const opt = (k, label) => `<option value="${esc(k)}"${k === cShape ? ' selected' : ''}>${esc(label)}</option>`;
+  const keys = Object.keys(SHAPES);
+  sel.innerHTML =
+    (SHAPES.ai ? `<optgroup label="这次 AI 画的">${opt('ai', SHAPES.ai.name)}</optgroup>` : '') +
+    (keys.some(k => k.startsWith('m:')) ? `<optgroup label="我的模型">${keys.filter(k => k.startsWith('m:')).map(k => opt(k, SHAPES[k].name)).join('')}</optgroup>` : '') +
+    `<optgroup label="内置">${keys.filter(k => !k.startsWith('m:') && k !== 'ai' && k !== 'none').map(k => opt(k, SHAPES[k].name)).join('')}</optgroup>` +
+    opt('none', '不要图（只显示进度条）');
+  const sh = SHAPES[cShape];
+  $('#shapeName').textContent = cShape === 'ai' ? `AI 画的：${sh.name}` : (sh.mine ? `我的模型：${sh.name}` : sh.name);
+  $('#saveModelRow').hidden = cShape !== 'ai';
+  $('#shapeHint').textContent = cShape === 'ai' ? '觉得画得还行就存下来，以后读同一种东西的图解会直接用这个形状。' : '';
+  $('#shapeSelLabel').textContent = aiDone ? '不满意的话换一个' : '选一个模型';
+  renderShapePreview();
+}
+function renderShapePreview() {
+  const box = $('#shapePreview');
+  if (!box) return;
+  const rows = (cSrc === 'sections' || cSrc === 'ai') ? expandSections(cSections) : [];
+  buildDiagram(box, SHAPES[cShape], rows)(-1);
+}
+$('#shapeSelect').addEventListener('change', e => setShape(e.target.value));
+$('#saveModelBtn').addEventListener('click', () => saveModel(SHAPES.ai, true));
+
+function saveModel(shape, fromCreate) {
+  if (!shape || !shape.parts || !shape.viewBox) return;
+  const name = prompt('给这个模型起个名字（比如：露指手套、毛衣、背心）', shape.name.replace(/^AI 画的形状$/, ''));
+  if (!name || !name.trim()) return;
+  const m = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5), name: name.trim(), viewBox: shape.viewBox, parts: JSON.parse(JSON.stringify(shape.parts)), updated: Date.now() };
+  (data.models = data.models || []).push(m);
+  registerModels();
+  save();
+  if (fromCreate) setShape('m:' + m.id);
+  alert(`存好了：「${m.name}」`);
+}
+
+// 管理我的模型
+function renderModels() {
+  const box = $('#modelsList');
   box.innerHTML = '';
-  Object.entries(SHAPES).forEach(([k, s]) => {
-    const b = document.createElement('button');
-    b.textContent = s.name;
-    b.className = k === cShape ? 'on' : '';
-    b.addEventListener('click', () => setShape(k));
-    box.appendChild(b);
+  const ms = data.models || [];
+  if (!ms.length) { box.innerHTML = '<p class="muted">还没有。AI 读完图解以后，在「示意图」那里点「存成我的模型」。</p>'; return; }
+  ms.forEach(m => {
+    const d = document.createElement('div');
+    d.className = 'model-item';
+    d.innerHTML = `<div class="model-thumb"></div><div class="model-name">${esc(m.name)}<div class="muted">${m.parts.map(p => esc(p.name)).join('、')}</div></div>`;
+    buildDiagram(d.querySelector('.model-thumb'), SHAPES['m:' + m.id], [])(-1);
+    const rn = document.createElement('button'); rn.className = 'link'; rn.textContent = '改名';
+    rn.addEventListener('click', () => { const n = prompt('新名字', m.name); if (n && n.trim()) { m.name = n.trim(); m.updated = Date.now(); registerModels(); save(); renderModels(); } });
+    const del = document.createElement('button'); del.className = 'link danger-link'; del.textContent = '删除';
+    del.addEventListener('click', () => {
+      if (!confirm(`删除模型「${m.name}」？已经在织的作品不受影响。`)) return;
+      data.models = data.models.filter(x => x !== m);
+      (data.deletedModels = data.deletedModels || {})[m.id] = Date.now();
+      registerModels(); save(); renderModels();
+    });
+    d.appendChild(rn); d.appendChild(del);
+    box.appendChild(d);
   });
 }
+$('#modelsBtn').addEventListener('click', () => { renderModels(); $('#modelsDialog').showModal(); });
+$('#modelsClose').addEventListener('click', () => $('#modelsDialog').close());
 function setShape(k) {
   cShape = k;
   const names = SHAPES[k].parts.map(p => p.name);
   if (!cDirty && !aiDone) {
-    cSections = SHAPES[k].defaults.map(([part, count, text, sts]) => ({ type: 'plain', part, count, text, sts }));
+    const defs = SHAPES[k].defaults.length ? SHAPES[k].defaults : SHAPES[k].parts.map(p => [p.name, 10, '全部下针', '']);
+    cSections = defs.map(([part, count, text, sts]) => ({ type: 'plain', part, count, text, sts }));
   } else {
     cSections.forEach(s => { if (!names.includes(s.part)) s.part = names[0]; });
   }
@@ -154,6 +208,7 @@ function setSrc(s) {
   $('#aiNotes').hidden = !(showSecs && $('#aiNotes').innerHTML);
   $('#secLabel').textContent = aiDone && showSecs ? 'AI 读出来的分段（哪里不对直接改）' : '分段';
   $('#secTotal').textContent = showSecs ? totalText() : '';
+  renderShapePicker();
   if (s === 'paste') updatePreview();
 }
 $$('#srcTabs button').forEach(b => b.addEventListener('click', () => setSrc(b.dataset.src)));
@@ -180,7 +235,7 @@ function totalText() {
   const n = expandSections(cSections).length;
   return n ? `一共 ${n} 圈` : '';
 }
-function touched() { cDirty = true; $('#secTotal').textContent = totalText(); }
+function touched() { cDirty = true; $('#secTotal').textContent = totalText(); clearTimeout(touched.t); touched.t = setTimeout(renderShapePreview, 300); }
 
 function partSelect(s) {
   const sel = document.createElement('select');
@@ -352,7 +407,7 @@ $('#saveProject').addEventListener('click', async () => {
     p.notes = cNotes.slice();
     if (!p.rows.length) { err.textContent = '至少要有一段，圈数大于 0。'; return; }
   }
-  if (cShape === 'ai' && SHAPES.ai && !p.counter) p.customShape = JSON.parse(JSON.stringify(SHAPES.ai));
+  if ((cShape === 'ai' || cShape.startsWith('m:')) && SHAPES[cShape] && !p.counter) p.customShape = JSON.parse(JSON.stringify(SHAPES[cShape]));
   p.images = [];
   try {
     for (const url of cImgs) {
@@ -586,6 +641,11 @@ $('#mRename').addEventListener('click', () => {
   const n = prompt('新名字', cur.name);
   if (n && n.trim()) { cur.name = n.trim(); cur.updated = Date.now(); $('#kName').textContent = cur.name; save(); }
 });
+$('#mModel').addEventListener('click', () => {
+  const sh = cur.customShape || SHAPES[cur.shape];
+  if (!sh || !sh.viewBox) { alert('这个作品没有示意图形状。'); return; }
+  saveModel(sh, false);
+});
 $('#mDelete').addEventListener('click', () => {
   if (confirm(`确定删除「${cur.name}」吗？删掉就找不回来了。`)) {
     (cur.images || []).forEach(id => IMG.del(id).catch(() => {}));
@@ -709,3 +769,4 @@ $('#imgDialog').addEventListener('keydown', e => {
 show('home');
 $$('.ai-btn').forEach(b => b.addEventListener('click', runAI));
 Cloud.init();
+registerModels();

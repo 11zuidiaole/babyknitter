@@ -2,36 +2,44 @@
 // 只让 AI 输出"分段"而不是每一圈，输出短很多，几十秒就能读完
 
 function buildAIPrompt(extraText) {
-  const presets = Object.entries(SHAPES)
+  const models = Object.entries(SHAPES)
     .filter(([k]) => k !== 'none' && k !== 'ai')
-    .map(([k, s]) => `${k}（${s.name}）：零件 ${s.parts.map(p => p.name).join('、')}`)
+    .map(([k, s]) => `- ${s.name}：零件 ${s.parts.map(p => p.name).join('、')}`)
     .join('\n');
-  return `你是编织图解助手。读下面的图解（截图或文字），整理成"分段"，用简单中文。
+  return `你是编织图解助手。读下面的图解（截图或文字），做两件事：1）整理成"分段"，用简单中文；2）给成品画一个简单的示意图形状。
 
 只输出一个 JSON，不要任何别的文字，不要代码块。格式：
 {
   "name": "作品名，看不出来写空字符串",
-  "shape": "sock / mitten / hat / scarf / panel / custom / none 之一",
-  "parts": [只有 shape 是 custom 才填：{"name": "零件名", "path": "SVG path，坐标在 0 0 400 400 以内", "box": [x0, y0, x1, y1], "dir": "up / down / left / right"}],
+  "model": "如果下面「已有模型」里有跟这个作品是同一种东西的，写那个模型的名字；没有就写 null",
+  "shape_name": "这类东西叫什么，比如 露指手套、毛衣、背心、帽子",
+  "parts": [model 是 null 时必须填：{"name": "零件名", "path": "SVG path", "box": [x0, y0, x1, y1], "dir": "up / down / left / right"}],
   "sections": [
     {"part": "零件名", "rounds": 圈数, "text": "这几圈每圈怎么织", "sts": 织完针数或 null, "note": "可选"},
     {"part": "零件名", "repeat": 重复次数, "start_sts": 这组开始前的针数或 null, "rows": [{"text": "组里第1圈怎么织", "change": 这圈加减几针}, ...], "note": "可选"}
   ],
-  "notes": ["整体说明：线材、针号、起针方法、密度、尺寸等，简短"],
+  "notes": ["整体说明：线材、针号、起针方法、密度、尺寸等，每条简短"],
   "uncertain": ["看不清或不确定的地方"]
 }
 
-分段规则：
-1. 连续几圈做法完全一样 → 用第一种（rounds）。
-2. 几圈一组循环（比如"每3圈加2针，第3圈加针，重复4次"）→ 用第二种（repeat + rows），rows 里每圈一条，change 是这一圈加了几针（减针写负数，不加减写 0）。
-3. 按图解的顺序写，从起针到收针。不要把整个图解拆成每一圈一条。
-4. text 用很简单的中文：k=下针，p=上针，k2tog=左上二并一，ssk=右上二并一，yo=挂针，m1=扭加针，kfb=一针里织两针，sl=滑针，tbl=扭针。日式/中式符号图也翻成文字。片织写清楚正面还是反面。
-5. 不确定的地方不要猜：写进 uncertain，并在那一段的 note 里写"请对照原图确认：…"。
-6. 截图里跟编织无关的东西（点赞、评论、水印）不用管。
+已有模型：
+${models}
 
-形状：作品跟哪个现成形状像就用哪个，part 必须用那个形状的零件名：
-${presets}
-都不像就用 custom，在 parts 里画简单轮廓（矩形、梯形、圆弧拼成成品的样子；box 是零件外框；dir 是从起针往收针的方向）。实在画不了用 none，part 自己起简单名字。
+形状规则：
+- 用已有模型时，sections 的 part 必须用那个模型的零件名。
+- 自己画时：零件按图解里真实的部位来分（比如露指手套可以是 罗纹、手掌、拇指、盖子；毛衣可以是 下摆、前身、袖子、领口），sections 的 part 必须用这些零件名。
+- 画成品平放的正面样子，坐标在 0 到 400 之间，零件拼在一起像成品；单独织再缝上去的零件（比如盖子）画在它缝的位置旁边。
+- 每个零件的 path 只用 M、L、Q、Z 和数字，画矩形、梯形、圆弧这种简单轮廓。box 是这个零件的外框。dir 是从起针织到收针的方向（从下往上织就是 up）。
+- 例子（手套）：罗纹 M100 340H240V410H100Z box [100,340,240,410] up；手掌 M100 130H240V340H100Z box [100,130,240,340] up；顶部 M100 130Q100 30 170 30Q240 30 240 130Z box [100,30,240,130] up。
+
+分段规则：
+1. 连续几圈做法完全一样 → 第一种（rounds）。
+2. 几圈一组循环（比如"每3圈加2针，重复4次"）→ 第二种（repeat + rows），rows 每圈一条，change 是这圈加了几针（减针负数，不加减 0）。
+3. 按图解顺序，从起针到收针。不要拆成每圈一条。
+4. text 要短（尽量 30 个字以内），只写织的动作；换针、起针方法、为什么这样织之类的放进 note。用简单中文：k=下针，p=上针，k2tog=左上二并一，ssk=右上二并一，yo=挂针，m1L=左扭加针，m1R=右扭加针，kfb=一针里织两针，sl=滑针，tbl=扭针。片织写清楚正面还是反面。
+5. 图解只写长度（比如"织到5cm"）时，按密度换算成圈数，并在 note 写"约XXcm，按自己的手调整"。
+6. 不确定的地方不要猜：写进 uncertain，并在那一段的 note 里写"请对照原图确认：…"。
+7. 截图里跟编织无关的东西（点赞、评论、水印）不用管。
 ${extraText ? '\n文字版图解：\n' + extraText : ''}`;
 }
 
@@ -55,20 +63,20 @@ const str = v => String(v ?? '').replace(/\s+/g, ' ').trim();
 function applyAIResult(j) {
   let shapeKey = 'none';
   delete SHAPES.ai;
-  if (j.shape === 'custom' && Array.isArray(j.parts) && j.parts.filter(validPart).length) {
-    const parts = j.parts.filter(validPart).map(p => ({
-      name: p.name.slice(0, 12), aliases: [p.name.slice(0, 12)], path: p.path, box: p.box, dir: p.dir,
-      label: [p.box[2] + 6, (p.box[1] + p.box[3]) / 2 + 5],
-    }));
-    SHAPES.ai = { name: 'AI 画的形状', viewBox: '-10 -10 500 420', parts, defaults: [] };
+  const byName = Object.keys(SHAPES).find(k => k !== 'none' && k !== 'ai' && j.model && SHAPES[k].name === String(j.model).trim());
+  const goodParts = Array.isArray(j.parts) ? j.parts.filter(validPart) : [];
+  if (byName) {
+    shapeKey = byName;
+  } else if (goodParts.length) {
+    const parts = goodParts.map(p => ({ name: p.name.slice(0, 12), aliases: [p.name.slice(0, 12)], path: p.path, box: p.box, dir: p.dir }));
+    SHAPES.ai = { name: str(j.shape_name) || str(j.name) || '新形状', viewBox: fitShape(parts), parts, defaults: [] };
     shapeKey = 'ai';
-  } else if (SHAPES[j.shape] && j.shape !== 'ai') {
-    shapeKey = j.shape;
   }
   const names = SHAPES[shapeKey].parts.map(p => p.name);
   const fixPart = p => {
     p = str(p).slice(0, 12) || names[0];
-    return shapeKey === 'none' || names.includes(p) ? p : names[0];
+    if (shapeKey === 'none' || names.includes(p)) return p;
+    return names.find(n => n.includes(p) || p.includes(n)) || names[0];
   };
   if (shapeKey === 'none') {
     const used = [...new Set((j.sections || []).map(s => fixPart(s.part)))];

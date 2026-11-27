@@ -6,7 +6,7 @@
 <title>babyknitter · 编织计数</title>
 <meta name="theme-color" content="#f7f2ea">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='40' fill='%232f7d6d'/><path d='M20 40Q50 20 80 40M18 55Q50 35 82 55M22 70Q50 50 78 70' stroke='%23f7f2ea' stroke-width='5' fill='none'/></svg>">
-<link rel="stylesheet" href="css/style.css?v=202611271831">
+<link rel="stylesheet" href="css/style.css?v=202611271841">
 </head>
 <body>
 
@@ -21,6 +21,7 @@
     <p>还没有作品。点右上角「新作品」开始。</p>
   </div>
   <footer class="home-foot">
+    <button class="link" id="modelsBtn">我的模型</button>
     <button class="link" id="exportBtn">导出备份</button>
     <label class="link">导入备份<input type="file" id="importFile" accept=".json" hidden></label>
   </footer>
@@ -85,8 +86,16 @@
 
     <!-- 形状 -->
     <div class="field" id="shapeField">
-      <span>形状</span>
-      <div id="shapePicker" class="chips"></div>
+      <span>示意图</span>
+      <div class="shape-box">
+        <div id="shapePreview" class="shape-preview"></div>
+        <div class="shape-side">
+          <div id="shapeName" class="shape-name"></div>
+          <div class="row-btns" id="saveModelRow"><button class="btn primary" id="saveModelBtn">存成我的模型</button></div>
+          <label class="field"><span id="shapeSelLabel">换一个模型</span><select id="shapeSelect"></select></label>
+          <p class="hint" id="shapeHint"></p>
+        </div>
+      </div>
     </div>
 
     <!-- 分段表格 -->
@@ -137,6 +146,7 @@
       <div class="menu" id="menu" hidden>
         <button id="mReset">进度清零</button>
         <button id="mRename">改名字</button>
+        <button id="mModel">把形状存成我的模型</button>
         <button id="mDelete" class="danger">删除作品</button>
       </div>
     </div>
@@ -216,14 +226,23 @@
   </div>
 </dialog>
 
+<dialog id="modelsDialog">
+  <div class="dlg">
+    <h3>我的模型</h3>
+    <p class="hint">AI 画过、你存下来的形状。以后 AI 读到同一种东西的图解，会直接用这里的形状。</p>
+    <div id="modelsList" class="models-list"></div>
+    <div class="row-btns"><button class="btn" id="modelsClose">关闭</button></div>
+  </div>
+</dialog>
+
 <div id="flash" class="flash"></div>
 
-<script src="js/shapes.js?v=202611271831"></script>
-<script src="js/parser.js?v=202611271831"></script>
-<script src="js/imgstore.js?v=202611271831"></script>
+<script src="js/shapes.js?v=202611271841"></script>
+<script src="js/parser.js?v=202611271841"></script>
+<script src="js/imgstore.js?v=202611271841"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/cloud.js?v=202611271831"></script>
-<script src="js/ai-import.js?v=202611271831"></script>
-<script src="js/app.js?v=202611271831"></script>
+<script src="js/cloud.js?v=202611271841"></script>
+<script src="js/ai-import.js?v=202611271841"></script>
+<script src="js/app.js?v=202611271841"></script>
 </body>
 </html>
