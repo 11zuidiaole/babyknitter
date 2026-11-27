@@ -47,6 +47,16 @@
     </div>
 
     <div class="field">
+      <span>图解截图（可以不传，可以多张）</span>
+      <label class="drop" id="cDrop">
+        <input type="file" id="cImgInput" accept="image/*" multiple hidden>
+        <span>点这里选截图，或者把图片拖进来 / 直接 Ctrl+V（Mac 是 ⌘V）粘贴</span>
+      </label>
+      <div class="thumbs" id="cImgs"></div>
+      <p class="hint">截图会跟作品存在一起，织的时候可以随时点开看。自动识别成逐圈文字是下一步要加的功能，现在先对着截图在下面填圈数，或者只计数。</p>
+    </div>
+
+    <div class="field">
       <span>图解怎么来</span>
       <div class="tabs" id="srcTabs">
         <button data-src="sections" class="on">分段填写</button>
@@ -142,6 +152,12 @@
     </div>
   </div>
 
+  <details class="all-rows" id="imgBox" open>
+    <summary id="imgSummary">图解截图</summary>
+    <div class="thumbs big" id="kImgs"></div>
+    <label class="btn small">＋ 加截图<input type="file" id="kImgInput" accept="image/*" multiple hidden></label>
+  </details>
+
   <details class="all-rows" id="allRowsBox">
     <summary>全部圈（点一圈可以跳过去或修改）</summary>
     <div id="allRows"></div>
@@ -162,10 +178,22 @@
   </form>
 </dialog>
 
+<dialog id="imgDialog" class="img-dlg">
+  <div class="img-bar">
+    <button class="btn ghost" id="ivPrev">← 上一张</button>
+    <span id="ivCount"></span>
+    <button class="btn ghost" id="ivNext">下一张 →</button>
+    <button class="btn ghost" id="ivZoom">放大</button>
+    <button class="btn ghost" id="ivClose">关闭</button>
+  </div>
+  <div class="img-view" id="ivWrap"><img id="ivImg" alt="图解截图"></div>
+</dialog>
+
 <div id="flash" class="flash"></div>
 
 <script src="js/shapes.js"></script>
 <script src="js/parser.js"></script>
+<script src="js/imgstore.js"></script>
 <script src="js/app.js"></script>
 </body>
 </html>

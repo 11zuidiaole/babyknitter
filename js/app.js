@@ -40,15 +40,21 @@ function renderHome() {
       const up = buildDiagram(c.querySelector('.thumb'), p.shape, p.rows);
       up(p.done);
     } else {
-      c.querySelector('.thumb').innerHTML = `<div style="font-size:48px;font-weight:700;color:var(--accent)">${p.done}</div>`;
+      const th = c.querySelector('.thumb');
+      th.innerHTML = `<div style="font-size:48px;font-weight:700;color:var(--accent)">${p.done}</div>`;
+      if (p.images && p.images[0]) IMG.get(p.images[0]).then(u => { if (u) th.innerHTML = `<img src="${u}" alt="" style="max-height:120px;max-width:100%;border-radius:8px">`; }).catch(() => {});
     }
     c.addEventListener('click', () => openKnit(p.id));
     list.appendChild(c);
   });
 }
 
-$('#exportBtn').addEventListener('click', () => {
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+$('#exportBtn').addEventListener('click', async () => {
+  const images = {};
+  for (const p of data.projects) for (const id of (p.images || [])) {
+    try { const u = await IMG.get(id); if (u) images[id] = u; } catch {}
+  }
+  const blob = new Blob([JSON.stringify({ ...data, images })], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = `babyknitter-备份-${new Date().toISOString().slice(0, 10)}.json`;
@@ -62,7 +68,11 @@ $('#importFile').addEventListener('change', async e => {
     const d = JSON.parse(await f.text());
     const ids = new Set(data.projects.map(p => p.id));
     let n = 0;
-    (d.projects || []).forEach(p => { if (p && p.id && !ids.has(p.id)) { data.projects.push(p); n++; } });
+    for (const p of (d.projects || [])) {
+      if (!p || !p.id || ids.has(p.id)) continue;
+      for (const id of (p.images || [])) if (d.images && d.images[id]) await IMG.put(id, d.images[id]);
+      data.projects.push(p); n++;
+    }
     save(); renderHome();
     alert(`导入了 ${n} 个作品`);
   } catch { alert('这个文件读不了，确定是 babyknitter 导出的备份吗？'); }
@@ -70,7 +80,7 @@ $('#importFile').addEventListener('change', async e => {
 });
 
 // ---------- 新建作品 ----------
-let cShape = 'sock', cSrc = 'sections', cSections = [];
+let cShape = 'sock', cSrc = 'sections', cSections = [], cImgs = [];
 
 $('#newBtn').addEventListener('click', () => {
   $('#fName').value = '';
@@ -78,6 +88,8 @@ $('#newBtn').addEventListener('click', () => {
   $('#pastePreview').innerHTML = '';
   $('#countTarget').value = '';
   $('#createError').textContent = '';
+  cImgs = [];
+  renderCThumbs();
   setShape('sock');
   setSrc('sections');
   show('create');
@@ -207,7 +219,7 @@ function updatePreview() {
 $('#pasteText').addEventListener('input', updatePreview);
 $('#doTranslate').addEventListener('change', updatePreview);
 
-$('#saveProject').addEventListener('click', () => {
+$('#saveProject').addEventListener('click', async () => {
   const err = $('#createError');
   err.textContent = '';
   const name = $('#fName').value.trim() || SHAPES[cShape].name;
@@ -228,6 +240,14 @@ $('#saveProject').addEventListener('click', () => {
     }
     if (!p.rows.length) { err.textContent = '至少要有一段，圈数大于 0。'; return; }
   }
+  p.images = [];
+  try {
+    for (const url of cImgs) {
+      const id = p.id + '-' + Math.random().toString(36).slice(2, 8);
+      await IMG.put(id, url);
+      p.images.push(id);
+    }
+  } catch (e) { err.textContent = '截图没存上（可能是浏览器空间不够）。'; return; }
   data.projects.push(p);
   save();
   openKnit(p.id);
@@ -250,6 +270,7 @@ function openKnit(id) {
   }
   show('knit');
   renderKnit();
+  renderKImgs();
 }
 
 function renderKnit() {
@@ -319,7 +340,7 @@ $('#stage').addEventListener('click', e => {
 $('#undoBtn').addEventListener('click', e => { e.stopPropagation(); step(-1); });
 
 document.addEventListener('keydown', e => {
-  if ($('#knit').hidden || $('#rowDialog').open) return;
+  if ($('#knit').hidden || $('#rowDialog').open || $('#imgDialog').open) return;
   if (e.target.closest && e.target.closest('input, textarea, select')) return;
   if (e.repeat) { e.preventDefault(); return; }
   const fwd = [' ', 'Enter', 'ArrowRight', 'ArrowDown', 'PageDown', 'MediaTrackNext'];
@@ -403,6 +424,7 @@ $('#mRename').addEventListener('click', () => {
 });
 $('#mDelete').addEventListener('click', () => {
   if (confirm(`确定删除「${cur.name}」吗？删掉就找不回来了。`)) {
+    (cur.images || []).forEach(id => IMG.del(id).catch(() => {}));
     data.projects = data.projects.filter(p => p !== cur);
     cur = null; save(); show('home');
   }
@@ -420,5 +442,98 @@ async function requestWake() {
 }
 function releaseWake() { if (wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; } }
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && !$('#knit').hidden) requestWake(); });
+// ---------- 截图 ----------
+async function addImages(files, target) {
+  const list = Array.from(files).filter(f => f.type.startsWith('image/'));
+  for (const f of list) {
+    try {
+      const url = await compressImage(f);
+      if (target === 'create') cImgs.push(url);
+      else if (cur) {
+        const id = cur.id + '-' + Math.random().toString(36).slice(2, 8);
+        await IMG.put(id, url);
+        (cur.images = cur.images || []).push(id);
+        save();
+      }
+    } catch { alert('有一张图片读不了'); }
+  }
+  if (target === 'create') renderCThumbs(); else renderKImgs();
+}
+
+function thumb(url, onOpen, onDel) {
+  const d = document.createElement('div');
+  d.className = 'thumb-item';
+  d.innerHTML = `<img src="${url}" alt="图解截图"><button class="x" aria-label="删掉这张">×</button>`;
+  d.addEventListener('click', onOpen);
+  d.querySelector('.x').addEventListener('click', e => { e.stopPropagation(); onDel(); });
+  return d;
+}
+
+function renderCThumbs() {
+  const box = $('#cImgs');
+  box.innerHTML = '';
+  cImgs.forEach((u, i) => box.appendChild(thumb(u, () => openViewer(cImgs, i), () => { cImgs.splice(i, 1); renderCThumbs(); })));
+}
+
+let kUrls = [];
+async function renderKImgs() {
+  if (!cur) return;
+  const ids = cur.images || [];
+  kUrls = [];
+  for (const id of ids) { try { kUrls.push(await IMG.get(id)); } catch { kUrls.push(null); } }
+  const box = $('#kImgs');
+  box.innerHTML = '';
+  ids.forEach((id, i) => {
+    if (!kUrls[i]) return;
+    box.appendChild(thumb(kUrls[i], () => openViewer(kUrls.filter(Boolean), kUrls.filter(Boolean).indexOf(kUrls[i])), () => {
+      if (!confirm('删掉这张截图？')) return;
+      IMG.del(id).catch(() => {});
+      cur.images.splice(i, 1);
+      save();
+      renderKImgs();
+    }));
+  });
+  $('#imgSummary').textContent = ids.length ? `图解截图（${ids.length} 张，点开看大图）` : '图解截图（还没有，可以加）';
+  if (!ids.length) $('#imgBox').open = false;
+}
+
+$('#cImgInput').addEventListener('change', e => { addImages(e.target.files, 'create'); e.target.value = ''; });
+$('#kImgInput').addEventListener('change', e => { addImages(e.target.files, 'knit'); e.target.value = ''; });
+const drop = $('#cDrop');
+['dragenter', 'dragover'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave', 'drop'].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.remove('over'); }));
+drop.addEventListener('drop', e => addImages(e.dataTransfer.files, 'create'));
+document.addEventListener('paste', e => {
+  const files = Array.from(e.clipboardData?.files || []);
+  if (!files.length) return;
+  if (!$('#create').hidden) { e.preventDefault(); addImages(files, 'create'); }
+  else if (!$('#knit').hidden) { e.preventDefault(); addImages(files, 'knit'); $('#imgBox').open = true; }
+});
+
+// 看大图
+let ivList = [], ivIdx = 0;
+function openViewer(list, i) {
+  ivList = list; ivIdx = Math.max(0, i);
+  $('#ivWrap').classList.remove('zoom');
+  $('#ivZoom').textContent = '放大';
+  showIv();
+  $('#imgDialog').showModal();
+}
+function showIv() {
+  $('#ivImg').src = ivList[ivIdx] || '';
+  $('#ivCount').textContent = `${ivIdx + 1} / ${ivList.length}`;
+  $('#ivWrap').scrollTop = 0;
+}
+$('#ivPrev').addEventListener('click', () => { if (ivIdx > 0) { ivIdx--; showIv(); } });
+$('#ivNext').addEventListener('click', () => { if (ivIdx < ivList.length - 1) { ivIdx++; showIv(); } });
+$('#ivClose').addEventListener('click', () => $('#imgDialog').close());
+$('#ivZoom').addEventListener('click', () => {
+  const z = $('#ivWrap').classList.toggle('zoom');
+  $('#ivZoom').textContent = z ? '缩小' : '放大';
+});
+$('#imgDialog').addEventListener('keydown', e => {
+  if (e.key === 'ArrowLeft') $('#ivPrev').click();
+  if (e.key === 'ArrowRight') $('#ivNext').click();
+});
 
 show('home');

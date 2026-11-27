@@ -171,3 +171,21 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
 
 .flash { position: fixed; inset: 0; pointer-events: none; background: var(--accent); opacity: 0; transition: opacity .35s; }
 .flash.on { opacity: .12; transition: none; }
+
+/* 截图 */
+.drop { border: 1.5px dashed var(--line); border-radius: 12px; padding: 18px; text-align: center; color: var(--muted); font-size: 14px; cursor: pointer; background: var(--bg); }
+.drop:hover, .drop.over { border-color: var(--accent); color: var(--accent); }
+.thumbs { display: flex; flex-wrap: wrap; gap: 8px; }
+.thumbs:empty { display: none; }
+.thumb-item { position: relative; width: 84px; height: 84px; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); cursor: zoom-in; background: var(--bg); }
+.thumbs.big .thumb-item { width: 120px; height: 150px; }
+.thumb-item img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.thumb-item .x { position: absolute; top: 3px; right: 3px; width: 22px; height: 22px; border-radius: 50%; border: none; background: rgba(0,0,0,.55); color: #fff; cursor: pointer; font-size: 13px; line-height: 22px; padding: 0; }
+#imgBox .btn.small { display: inline-block; margin-top: 10px; padding: 6px 12px; font-size: 14px; }
+#imgBox .thumbs { margin-top: 10px; }
+.img-dlg { width: min(960px, 96vw); max-height: 94vh; }
+.img-bar { display: flex; align-items: center; gap: 6px; padding: 8px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.img-bar span { flex: 1; text-align: center; color: var(--muted); font-size: 14px; }
+.img-view { max-height: calc(94vh - 60px); overflow: auto; background: var(--bg); }
+.img-view img { display: block; width: 100%; height: auto; }
+.img-view.zoom img { width: 200%; max-width: none; }
