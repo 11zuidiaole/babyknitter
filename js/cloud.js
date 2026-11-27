@@ -158,11 +158,16 @@ const Cloud = (() => {
   // ---- AI ----
   async function ai(prompt, images) {
     if (!user) throw new Error('需要先登录');
-    const { data: d, error } = await sb.functions.invoke(AI_FN, { body: { prompt, images, max_tokens: 32000, model: 'claude-sonnet-5-5' } });
+    const { data: d, error } = await sb.functions.invoke(AI_FN, { body: { prompt, images, max_tokens: 8000, model: 'claude-sonnet-5-5' } });
     if (error) {
-      let msg = error.message;
+      let msg = error.message || '', status = error.context && error.context.status;
       try { const j = await error.context.json(); msg = j.error || msg; } catch {}
-      throw new Error(msg);
+      if (status === 504 || status === 546 || /Failed to send|timed? ?out|NetworkError|Load failed|Failed to fetch/i.test(msg)) msg = '等太久超时了，或者网络断了。截图少传几张再试试。';
+      else if (status === 401) msg = '登录过期了，退出再重新登录试试。';
+      else if (status === 403) msg = '这个账号没有使用 AI 的权限（itinera-ai 里设了 ALLOWED_EMAILS）。';
+      else if (/credit|balance|billing/i.test(msg)) msg = 'Anthropic 账户余额不够了：' + msg;
+      else if (/spend|limit/i.test(msg)) msg = '到了 Anthropic 后台设的花费上限：' + msg;
+      throw new Error(msg + (status ? `（错误码 ${status}）` : ''));
     }
     if (d && d.error) throw new Error(d.error);
     return d;

@@ -91,7 +91,8 @@ $('#importFile').addEventListener('change', async e => {
 });
 
 // ---------- 新建作品 ----------
-let cShape = 'sock', cSrc = 'sections', cSections = [], cImgs = [];
+// 分段：plain = 连续几圈一样；group = 几圈一组重复几次
+let cShape = 'sock', cSrc = 'ai', cSections = [], cImgs = [], cNotes = [], aiDone = false, cDirty = false;
 
 $('#newBtn').addEventListener('click', () => {
   $('#fName').value = '';
@@ -99,12 +100,14 @@ $('#newBtn').addEventListener('click', () => {
   $('#pastePreview').innerHTML = '';
   $('#countTarget').value = '';
   $('#createError').textContent = '';
-  cImgs = [];
+  ['#aiStatus', '#aiStatus2'].forEach(x => { $(x).textContent = ''; $(x).classList.remove('err'); });
+  $('#aiNotes').innerHTML = '';
+  cImgs = []; cNotes = []; aiDone = false; cDirty = false;
   renderCThumbs();
   delete SHAPES.ai;
-  $('#aiStatus').textContent = '';
+  SHAPES.none.parts = [{ name: '全部', aliases: [], path: '', box: null, dir: 'down' }];
   setShape('sock');
-  setSrc('sections');
+  setSrc('ai');
   show('create');
 });
 
@@ -121,7 +124,12 @@ function renderShapePicker() {
 }
 function setShape(k) {
   cShape = k;
-  cSections = SHAPES[k].defaults.map(([part, count, text, sts]) => ({ type: 'plain', part, count, text, sts }));
+  const names = SHAPES[k].parts.map(p => p.name);
+  if (!cDirty && !aiDone) {
+    cSections = SHAPES[k].defaults.map(([part, count, text, sts]) => ({ type: 'plain', part, count, text, sts }));
+  } else {
+    cSections.forEach(s => { if (!names.includes(s.part)) s.part = names[0]; });
+  }
   renderShapePicker();
   renderSections();
   fillPartSelect($('#gPart'));
@@ -135,61 +143,132 @@ function setSrc(s) {
   cSrc = s;
   $$('#srcTabs button').forEach(b => b.classList.toggle('on', b.dataset.src === s));
   $$('.src').forEach(d => d.hidden = d.dataset.src !== s);
+  const showSecs = s === 'sections' || (s === 'ai' && aiDone);
+  $('#imgField').hidden = !(s === 'ai' || s === 'count');
+  $('#aiRow').hidden = s !== 'ai';
+  $('#aiStatus').hidden = s !== 'ai';
+  $('#imgFieldLabel').textContent = s === 'ai' ? '图解截图（可以多张，一次最多读 8 张）' : '图解截图（可以不传，织的时候方便对照）';
+  $('#shapeField').hidden = !(showSecs || s === 'paste');
+  $('#secArea').hidden = !showSecs;
+  $('#aiNotes').hidden = !(showSecs && $('#aiNotes').innerHTML);
+  $('#secLabel').textContent = aiDone && showSecs ? 'AI 读出来的分段（哪里不对直接改）' : '分段';
+  $('#secTotal').textContent = showSecs ? totalText() : '';
   if (s === 'paste') updatePreview();
 }
 $$('#srcTabs button').forEach(b => b.addEventListener('click', () => setSrc(b.dataset.src)));
+
+// 分段 → 一圈一圈
+function expandSections(secs) {
+  const rows = [];
+  for (const s of secs) {
+    if (s.type === 'group') {
+      let run = s.start === '' || s.start == null || isNaN(+s.start) ? null : +s.start;
+      const times = Math.min(Math.max(0, +s.times || 0), 500);
+      for (let t = 0; t < times; t++) s.rows.forEach((r, j) => {
+        if (run !== null) run += (+r.change || 0);
+        rows.push({ part: s.part, text: r.text || '（没写做法）', sts: run === null ? '' : run, note: t === 0 && j === 0 ? (s.note || '') : '', orig: '' });
+      });
+    } else {
+      const n = Math.min(Math.max(0, +s.count || 0), 2000);
+      for (let i = 0; i < n; i++) rows.push({ part: s.part, text: s.text || '（没写做法）', sts: s.sts === '' || s.sts == null ? '' : +s.sts, note: i === 0 ? (s.note || '') : '', orig: '' });
+    }
+  }
+  return rows;
+}
+function totalText() {
+  const n = expandSections(cSections).length;
+  return n ? `一共 ${n} 圈` : '';
+}
+function touched() { cDirty = true; $('#secTotal').textContent = totalText(); }
+
+function partSelect(s) {
+  const sel = document.createElement('select');
+  fillPartSelect(sel, s.part);
+  sel.addEventListener('change', () => { s.part = sel.value; touched(); });
+  return sel;
+}
+function xBtn(label, fn) {
+  const x = document.createElement('button');
+  x.className = 'x'; x.textContent = '×'; x.setAttribute('aria-label', label);
+  x.addEventListener('click', fn);
+  return x;
+}
 
 function renderSections() {
   const box = $('#sectionList');
   box.innerHTML = `<div class="sec-row head"><span>部位</span><span>圈数</span><span>做法</span><span>织完针数</span><span></span></div>`;
   cSections.forEach((s, i) => {
-    const row = document.createElement('div');
-    row.className = 'sec-row' + (s.type === 'gen' ? ' gen-row' : '');
-    const sel = document.createElement('select');
-    fillPartSelect(sel, s.part);
-    sel.addEventListener('change', () => s.part = sel.value);
-    row.appendChild(sel);
-    if (s.type === 'gen') {
-      row.insertAdjacentHTML('beforeend', `<span class="muted">${s.rows.length}圈</span><span class="gen-tag">${esc(s.label)}</span>`);
-    } else {
-      row.insertAdjacentHTML('beforeend', `
-        <input type="number" min="1" value="${esc(s.count)}" class="s-count" aria-label="圈数">
-        <input value="${esc(s.text)}" class="s-text" placeholder="做法" aria-label="做法">
-        <input type="number" value="${esc(s.sts)}" class="s-sts" placeholder="针数" aria-label="织完针数">`);
-      row.querySelector('.s-count').addEventListener('input', e => s.count = e.target.value);
-      row.querySelector('.s-text').addEventListener('input', e => s.text = e.target.value);
-      row.querySelector('.s-sts').addEventListener('input', e => s.sts = e.target.value);
+    const del = () => { cSections.splice(i, 1); touched(); renderSections(); };
+    if (s.type === 'group') {
+      const g = document.createElement('div');
+      g.className = 'grp' + (s.flag ? ' flag' : '');
+      const head = document.createElement('div');
+      head.className = 'grp-head';
+      head.appendChild(partSelect(s));
+      head.insertAdjacentHTML('beforeend', `<span>下面 ${s.rows.length} 圈一组，重复</span><input type="number" min="1" class="g-times" value="${esc(s.times)}"><span>次，开始时</span><input type="number" class="g-start" placeholder="针数" value="${esc(s.start ?? '')}"><span>针</span>`);
+      head.appendChild(xBtn('删掉这组', del));
+      head.querySelector('.g-times').addEventListener('input', e => { s.times = e.target.value; touched(); foot(); });
+      head.querySelector('.g-start').addEventListener('input', e => { s.start = e.target.value; touched(); foot(); });
+      g.appendChild(head);
+      s.rows.forEach((r, j) => {
+        const row = document.createElement('div');
+        row.className = 'grp-row';
+        row.innerHTML = `<span>${j + 1}</span><input class="t" value="${esc(r.text)}" placeholder="做法"><input class="c" type="number" value="${esc(r.change || 0)}" title="这圈加减几针（减针填负数）">`;
+        row.querySelector('.t').addEventListener('input', e => { r.text = e.target.value; touched(); });
+        row.querySelector('.c').addEventListener('input', e => { r.change = e.target.value; touched(); foot(); });
+        row.appendChild(xBtn('删掉这圈', () => { if (s.rows.length > 1) { s.rows.splice(j, 1); touched(); renderSections(); } }));
+        g.appendChild(row);
+      });
+      const f = document.createElement('div');
+      f.className = 'grp-foot';
+      g.appendChild(f);
+      function foot() {
+        const total = (+s.times || 0) * s.rows.length;
+        const ch = s.rows.reduce((a, r) => a + (+r.change || 0), 0) * (+s.times || 0);
+        f.innerHTML = `<span>共 ${total} 圈${s.start !== '' && s.start != null && !isNaN(+s.start) ? `，${s.start} 针 → ${+s.start + ch} 针` : ''}${s.note ? ' · ' + esc(s.note) : ''}</span><span><span class="muted">右边数字 = 这圈加减几针</span> <button class="link">＋ 组里加一圈</button></span>`;
+        f.querySelector('.link').addEventListener('click', () => { s.rows.push({ text: '全部下针', change: 0 }); touched(); renderSections(); });
+      }
+      foot();
+      box.appendChild(g);
+      return;
     }
-    const x = document.createElement('button');
-    x.className = 'x'; x.textContent = '×'; x.setAttribute('aria-label', '删掉这段');
-    x.addEventListener('click', () => { cSections.splice(i, 1); renderSections(); });
-    row.appendChild(x);
+    const row = document.createElement('div');
+    row.className = 'sec-row' + (s.flag ? ' flag' : '');
+    row.appendChild(partSelect(s));
+    row.insertAdjacentHTML('beforeend', `
+      <input type="number" min="1" value="${esc(s.count)}" class="s-count" aria-label="圈数">
+      <input value="${esc(s.text)}" class="s-text" placeholder="做法" aria-label="做法" title="${esc(s.note || '')}">
+      <input type="number" value="${esc(s.sts ?? '')}" class="s-sts" placeholder="针数" aria-label="织完针数">`);
+    row.querySelector('.s-count').addEventListener('input', e => { s.count = e.target.value; touched(); });
+    row.querySelector('.s-text').addEventListener('input', e => { s.text = e.target.value; touched(); });
+    row.querySelector('.s-sts').addEventListener('input', e => { s.sts = e.target.value; touched(); });
+    row.appendChild(xBtn('删掉这段', del));
     box.appendChild(row);
+    if (s.note) box.insertAdjacentHTML('beforeend', `<div class="hint ${s.flag ? 'warn' : ''}" style="margin:-4px 0 8px;font-size:13px;${s.flag ? 'color:var(--danger)' : ''}">↑ ${esc(s.note)}</div>`);
   });
+  $('#secTotal').textContent = $('#secArea').hidden ? '' : totalText();
 }
+const lastPart = () => (cSections[cSections.length - 1] || {}).part || SHAPES[cShape].parts[0].name;
 $('#addSection').addEventListener('click', () => {
-  const last = cSections[cSections.length - 1];
-  cSections.push({ type: 'plain', part: last ? last.part : SHAPES[cShape].parts[0].name, count: 10, text: '全部下针', sts: '' });
-  renderSections();
+  cSections.push({ type: 'plain', part: lastPart(), count: 10, text: '全部下针', sts: '' });
+  touched(); renderSections();
+});
+$('#addGroup').addEventListener('click', () => {
+  cSections.push({ type: 'group', part: lastPart(), times: 4, start: '', rows: [{ text: '全部下针', change: 0 }, { text: '全部下针', change: 0 }, { text: '两侧各加1针', change: 2 }] });
+  touched(); renderSections();
 });
 
-$('#openGen').addEventListener('click', () => { fillPartSelect($('#gPart'), cSections[cSections.length - 1]?.part); $('#genBox').hidden = false; });
+$('#openGen').addEventListener('click', () => { fillPartSelect($('#gPart'), lastPart()); $('#genBox').hidden = false; });
 $('#genClose').addEventListener('click', () => $('#genBox').hidden = true);
 $('#genAdd').addEventListener('click', () => {
-  const opt = {
-    start: $('#gStart').value, every: $('#gEvery').value, change: $('#gChange').value, target: $('#gTarget').value,
-    plainText: $('#gPlain').value || '全部下针', changeText: $('#gChangeText').value || '加减针',
-    changeFirst: $('#gWhere').value === 'first',
-  };
-  const rows = generateShaping(opt);
-  if (!rows.length) { alert('生成不了：检查一下起始针数、目标针数和每组加几针（减针要填负数）。'); return; }
-  const verb = +opt.change > 0 ? '加' : '减';
-  cSections.push({
-    type: 'gen', part: $('#gPart').value, rows,
-    label: `${opt.start}针 → ${opt.target}针，每${opt.every}圈${verb}${Math.abs(opt.change)}针`,
-  });
+  const start = +$('#gStart').value, every = Math.max(1, +$('#gEvery').value || 1), change = +$('#gChange').value, target = +$('#gTarget').value;
+  if (!start || !change || !target || (target - start) / change <= 0) { alert('生成不了：检查一下起始针数、目标针数和每组加几针（减针要填负数）。'); return; }
+  const first = $('#gWhere').value === 'first';
+  const plain = $('#gPlain').value || '全部下针', chText = $('#gChangeText').value || '加减针';
+  const rows = Array.from({ length: every }, (_, i) => (first ? i === 0 : i === every - 1) ? { text: chText, change } : { text: plain, change: 0 });
+  cSections.push({ type: 'group', part: $('#gPart').value, times: Math.ceil((target - start) / change), start, rows });
   $('#genBox').hidden = true;
-  renderSections();
+  touched(); renderSections();
 });
 
 // 粘贴解析
@@ -226,7 +305,7 @@ function updatePreview() {
     box.innerHTML = `
       <div class="pv-head">认出了 ${r.rows.length} 圈${summary ? '：' + esc(summary) : ''}${r.notes.length ? `，另外 ${r.notes.length} 行当作说明` : ''}</div>
       ${r.warnings.map(w => `<div class="pv-warn">⚠ ${esc(w)}</div>`).join('')}
-      ${r.rows.length ? `<ol>${r.rows.map((x, i) => `<li><b>${i + 1} · ${esc(x.part)}</b><span>${esc(x.text)}${x.sts !== '' ? ` → ${x.sts}针` : ''}</span></li>`).join('')}</ol>` : '<div class="pv-warn">一圈都没认出来。每行开头要有圈数，比如「第1圈：」或「Rnd 1:」。</div>'}`;
+      ${r.rows.length ? `<ol>${r.rows.map((x, i) => `<li><b>${i + 1} · ${esc(x.part)}</b><span>${esc(x.text)}${x.sts !== '' ? ` → ${x.sts}针` : ''}</span></li>`).join('')}</ol>` : '<div class="pv-warn">一圈都没认出来。每行开头要有圈数，比如「第1圈：」或「Rnd 1:」。格式太乱的话点上面「让 AI 整理成分段」。</div>'}`;
   }, 200);
 }
 $('#pasteText').addEventListener('input', updatePreview);
@@ -237,23 +316,21 @@ $('#saveProject').addEventListener('click', async () => {
   err.textContent = '';
   const name = $('#fName').value.trim() || SHAPES[cShape].name;
   const p = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), name, shape: cShape, rows: [], done: 0, notes: [], created: Date.now(), updated: Date.now() };
-  if (cShape === 'ai' && SHAPES.ai) p.customShape = JSON.parse(JSON.stringify(SHAPES.ai));
 
   if (cSrc === 'count') {
     p.counter = true;
     p.target = +$('#countTarget').value || 0;
   } else if (cSrc === 'paste') {
     const r = parseCurrentPaste();
-    if (!r.rows.length) { err.textContent = '还没认出任何一圈，看看下面的提示。'; return; }
+    if (!r.rows.length) { err.textContent = '还没认出任何一圈，看看上面的提示。'; return; }
     p.rows = r.rows; p.notes = r.notes;
   } else {
-    for (const s of cSections) {
-      if (s.type === 'gen') { s.rows.forEach(r => p.rows.push({ part: s.part, text: r.text, sts: r.sts, note: '', orig: '' })); continue; }
-      const n = Math.min(+s.count || 0, 2000);
-      for (let i = 0; i < n; i++) p.rows.push({ part: s.part, text: s.text || '（没写做法）', sts: i === n - 1 ? (s.sts === '' ? '' : +s.sts) : (s.sts === '' ? '' : +s.sts), note: '', orig: '' });
-    }
+    if (cSrc === 'ai' && !aiDone) { err.textContent = cImgs.length ? '先点「让 AI 读截图」。不想用 AI 的话，选「自己分段填」或「只计数」。' : '先传截图。'; return; }
+    p.rows = expandSections(cSections);
+    p.notes = cNotes.slice();
     if (!p.rows.length) { err.textContent = '至少要有一段，圈数大于 0。'; return; }
   }
+  if (cShape === 'ai' && SHAPES.ai && !p.counter) p.customShape = JSON.parse(JSON.stringify(SHAPES.ai));
   p.images = [];
   try {
     for (const url of cImgs) {

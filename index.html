@@ -42,37 +42,61 @@
     </label>
 
     <div class="field">
-      <span>形状</span>
-      <div id="shapePicker" class="chips"></div>
-    </div>
-
-    <div class="field">
-      <span>图解截图（可以不传，可以多张）</span>
-      <label class="drop" id="cDrop">
-        <input type="file" id="cImgInput" accept="image/*" multiple hidden>
-        <span>点这里选截图，或者把图片拖进来 / 直接 Ctrl+V（Mac 是 ⌘V）粘贴</span>
-      </label>
-      <div class="thumbs" id="cImgs"></div>
-      <div class="row-btns"><button class="btn primary ai-btn">让 AI 读截图，生成逐圈 ✦</button></div>
-      <p class="hint" id="aiStatus"></p>
-      <p class="hint">截图会跟作品存在一起，织的时候可以随时点开看。AI 读完会把结果放进「粘贴文字」，你检查、修改以后再开始织。也可以不用 AI，对着截图分段填写或者只计数。</p>
-    </div>
-
-    <div class="field">
-      <span>图解怎么来</span>
+      <span>图解从哪来</span>
       <div class="tabs" id="srcTabs">
-        <button data-src="sections" class="on">分段填写</button>
+        <button data-src="ai" class="on">截图让 AI 读</button>
+        <button data-src="sections">自己分段填</button>
         <button data-src="paste">粘贴文字</button>
         <button data-src="count">只计数</button>
       </div>
     </div>
 
-    <!-- 分段填写 -->
-    <div class="src" data-src="sections">
-      <p class="hint">每一段是连续几圈做法一样的部分。部位决定它在示意图上亮哪里。</p>
+    <!-- 截图（AI 读 / 只计数时可以附上） -->
+    <div class="field" id="imgField">
+      <span id="imgFieldLabel">图解截图（可以多张，一次最多读 8 张）</span>
+      <label class="drop" id="cDrop">
+        <input type="file" id="cImgInput" accept="image/*" multiple hidden>
+        <span>点这里选截图，或者把图片拖进来 / 直接 Ctrl+V（Mac 是 ⌘V）粘贴</span>
+      </label>
+      <div class="thumbs" id="cImgs"></div>
+      <div class="row-btns" id="aiRow"><button class="btn primary ai-btn" data-ai="img">让 AI 读截图 ✦</button></div>
+      <div class="ai-status" id="aiStatus"></div>
+    </div>
+
+    <!-- 粘贴文字 -->
+    <div class="src" data-src="paste" hidden>
+      <p class="hint">支持这些写法，一行一圈：<br>
+        <code>第1圈：全部下针 → 34针</code> · <code>第4-6圈：全部下针</code> · <code>Rnd 3: k2tog, k to end (32 sts)</code> · <code>Rows 1–10: k1, p1</code><br>
+        单独一行写部位名（比如 <code>【袜筒】</code> 或 <code>Heel</code>）会把下面的圈归到那个部位。<code>重复第1-3圈共5次</code> / <code>Repeat rnds 1-3 4 more times</code> 会自动展开。</p>
+      <textarea id="pasteText" rows="10" placeholder="把图解文字贴在这里"></textarea>
+      <div class="row-btns"><button class="btn ai-btn" data-ai="text">文字太乱？让 AI 整理成分段 ✦</button></div>
+      <div class="ai-status" id="aiStatus2"></div>
+      <label class="check"><input type="checkbox" id="doTranslate" checked> 把英文缩写翻译成中文</label>
+      <div id="pastePreview" class="preview"></div>
+    </div>
+
+    <!-- 只计数 -->
+    <div class="src" data-src="count" hidden>
+      <label class="field inline"><span>目标行数（可以不填）</span><input id="countTarget" type="number" placeholder="比如 120"></label>
+    </div>
+
+    <!-- AI 的说明和不确定的地方 -->
+    <div id="aiNotes" class="ai-notes" hidden></div>
+
+    <!-- 形状 -->
+    <div class="field" id="shapeField">
+      <span>形状</span>
+      <div id="shapePicker" class="chips"></div>
+    </div>
+
+    <!-- 分段表格 -->
+    <div class="field" id="secArea">
+      <span id="secLabel">分段</span>
+      <p class="hint">一段 = 连续几圈做法一样。「一组重复」= 几圈为一组循环织（比如 3 圈一组、第 3 圈加针，重复 4 次）。部位决定在示意图上亮哪里。</p>
       <div id="sectionList"></div>
       <div class="row-btns">
         <button class="btn" id="addSection">＋ 加一段</button>
+        <button class="btn" id="addGroup">＋ 加一组重复</button>
         <button class="btn" id="openGen">＋ 加减针生成器</button>
       </div>
 
@@ -95,24 +119,8 @@
       </div>
     </div>
 
-    <!-- 粘贴文字 -->
-    <div class="src" data-src="paste" hidden>
-      <p class="hint">支持这些写法，一行一圈：<br>
-        <code>第1圈：全部下针 → 34针</code> · <code>第4-6圈：全部下针</code> · <code>Rnd 3: k2tog, k to end (32 sts)</code> · <code>Rows 1–10: k1, p1</code> · <code>1 | 全部下针 | 34</code><br>
-        单独一行写部位名（比如 <code>【袜筒】</code> 或 <code>Heel</code>）会把下面的圈归到那个部位。<code>重复第1-3圈共5次</code> / <code>Repeat rnds 1-3 4 more times</code> 会自动展开。</p>
-      <textarea id="pasteText" rows="10" placeholder="把图解文字贴在这里"></textarea>
-      <div class="row-btns"><button class="btn ai-btn">文字太乱？让 AI 整理 ✦</button></div>
-      <label class="check"><input type="checkbox" id="doTranslate" checked> 把英文缩写翻译成中文</label>
-      <div id="pastePreview" class="preview"></div>
-    </div>
-
-    <!-- 只计数 -->
-    <div class="src" data-src="count" hidden>
-      <p class="hint">不用图解，就数行数。</p>
-      <label class="field inline"><span>目标行数（可以不填）</span><input id="countTarget" type="number" placeholder="比如 120"></label>
-    </div>
-
     <div class="form-foot">
+      <span id="secTotal" class="muted"></span>
       <span id="createError" class="error"></span>
       <button class="btn primary big" id="saveProject">开始织</button>
     </div>
