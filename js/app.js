@@ -6,8 +6,18 @@ function load() {
   try { return JSON.parse(localStorage.getItem(KEY)) || { projects: [] }; }
   catch { return { projects: [] }; }
 }
-function save() {
+function localSave() {
   try { localStorage.setItem(KEY, JSON.stringify(data)); } catch (e) { console.warn(e); }
+}
+function save() {
+  localSave();
+  if (typeof Cloud !== 'undefined') Cloud.schedulePush();
+}
+const shapeOf = p => p.customShape || p.shape;
+async function getImg(id) {
+  let u = await IMG.get(id).catch(() => null);
+  if (!u && typeof Cloud !== 'undefined') u = await Cloud.fetchImage(id);
+  return u;
 }
 const $ = s => document.querySelector(s);
 const $$ = s => Array.from(document.querySelectorAll(s));
@@ -37,12 +47,12 @@ function renderHome() {
       : (p.done >= total ? '织完啦' : `第 ${p.done + 1} / ${total} 圈 · ${p.rows[p.done]?.part || ''}`);
     c.innerHTML = `<div class="thumb"></div><h3>${esc(p.name)}</h3><div class="meta">${esc(meta)}</div>`;
     if (!p.counter) {
-      const up = buildDiagram(c.querySelector('.thumb'), p.shape, p.rows);
+      const up = buildDiagram(c.querySelector('.thumb'), shapeOf(p), p.rows);
       up(p.done);
     } else {
       const th = c.querySelector('.thumb');
       th.innerHTML = `<div style="font-size:48px;font-weight:700;color:var(--accent)">${p.done}</div>`;
-      if (p.images && p.images[0]) IMG.get(p.images[0]).then(u => { if (u) th.innerHTML = `<img src="${u}" alt="" style="max-height:120px;max-width:100%;border-radius:8px">`; }).catch(() => {});
+      if (p.images && p.images[0]) getImg(p.images[0]).then(u => { if (u) th.innerHTML = `<img src="${u}" alt="" style="max-height:120px;max-width:100%;border-radius:8px">`; }).catch(() => {});
     }
     c.addEventListener('click', () => openKnit(p.id));
     list.appendChild(c);
@@ -69,6 +79,7 @@ $('#importFile').addEventListener('change', async e => {
     const ids = new Set(data.projects.map(p => p.id));
     let n = 0;
     for (const p of (d.projects || [])) {
+      if (p) p.updated = Date.now();
       if (!p || !p.id || ids.has(p.id)) continue;
       for (const id of (p.images || [])) if (d.images && d.images[id]) await IMG.put(id, d.images[id]);
       data.projects.push(p); n++;
@@ -90,6 +101,8 @@ $('#newBtn').addEventListener('click', () => {
   $('#createError').textContent = '';
   cImgs = [];
   renderCThumbs();
+  delete SHAPES.ai;
+  $('#aiStatus').textContent = '';
   setShape('sock');
   setSrc('sections');
   show('create');
@@ -224,6 +237,7 @@ $('#saveProject').addEventListener('click', async () => {
   err.textContent = '';
   const name = $('#fName').value.trim() || SHAPES[cShape].name;
   const p = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6), name, shape: cShape, rows: [], done: 0, notes: [], created: Date.now(), updated: Date.now() };
+  if (cShape === 'ai' && SHAPES.ai) p.customShape = JSON.parse(JSON.stringify(SHAPES.ai));
 
   if (cSrc === 'count') {
     p.counter = true;
@@ -246,6 +260,7 @@ $('#saveProject').addEventListener('click', async () => {
       const id = p.id + '-' + Math.random().toString(36).slice(2, 8);
       await IMG.put(id, url);
       p.images.push(id);
+      if (typeof Cloud !== 'undefined') Cloud.uploadImage(id, url);
     }
   } catch (e) { err.textContent = '截图没存上（可能是浏览器空间不够）。'; return; }
   data.projects.push(p);
@@ -265,7 +280,7 @@ function openKnit(id) {
   $('#diagram').hidden = !!cur.counter;
   $('#allRowsBox').hidden = !!cur.counter;
   if (!cur.counter) {
-    updateDiagram = buildDiagram($('#diagram'), cur.shape, cur.rows);
+    updateDiagram = buildDiagram($('#diagram'), shapeOf(cur), cur.rows);
     renderAllRows();
   }
   show('knit');
@@ -416,15 +431,17 @@ $('#rowDialog').addEventListener('close', () => {
 $('#menuBtn').addEventListener('click', e => { e.stopPropagation(); $('#menu').hidden = !$('#menu').hidden; });
 document.addEventListener('click', () => $('#menu').hidden = true);
 $('#mReset').addEventListener('click', () => {
-  if (confirm('确定把进度清零吗？')) { cur.done = 0; save(); renderKnit(); }
+  if (confirm('确定把进度清零吗？')) { cur.done = 0; cur.updated = Date.now(); save(); renderKnit(); }
 });
 $('#mRename').addEventListener('click', () => {
   const n = prompt('新名字', cur.name);
-  if (n && n.trim()) { cur.name = n.trim(); $('#kName').textContent = cur.name; save(); }
+  if (n && n.trim()) { cur.name = n.trim(); cur.updated = Date.now(); $('#kName').textContent = cur.name; save(); }
 });
 $('#mDelete').addEventListener('click', () => {
   if (confirm(`确定删除「${cur.name}」吗？删掉就找不回来了。`)) {
     (cur.images || []).forEach(id => IMG.del(id).catch(() => {}));
+    Cloud.deleteImages(cur.images || []);
+    (data.deleted = data.deleted || {})[cur.id] = Date.now();
     data.projects = data.projects.filter(p => p !== cur);
     cur = null; save(); show('home');
   }
@@ -453,7 +470,9 @@ async function addImages(files, target) {
         const id = cur.id + '-' + Math.random().toString(36).slice(2, 8);
         await IMG.put(id, url);
         (cur.images = cur.images || []).push(id);
+        cur.updated = Date.now();
         save();
+        Cloud.uploadImage(id, url);
       }
     } catch { alert('有一张图片读不了'); }
   }
@@ -480,7 +499,7 @@ async function renderKImgs() {
   if (!cur) return;
   const ids = cur.images || [];
   kUrls = [];
-  for (const id of ids) { try { kUrls.push(await IMG.get(id)); } catch { kUrls.push(null); } }
+  for (const id of ids) { try { kUrls.push(await getImg(id)); } catch { kUrls.push(null); } }
   const box = $('#kImgs');
   box.innerHTML = '';
   ids.forEach((id, i) => {
@@ -488,7 +507,9 @@ async function renderKImgs() {
     box.appendChild(thumb(kUrls[i], () => openViewer(kUrls.filter(Boolean), kUrls.filter(Boolean).indexOf(kUrls[i])), () => {
       if (!confirm('删掉这张截图？')) return;
       IMG.del(id).catch(() => {});
+      Cloud.deleteImages([id]);
       cur.images.splice(i, 1);
+      cur.updated = Date.now();
       save();
       renderKImgs();
     }));
@@ -537,3 +558,5 @@ $('#imgDialog').addEventListener('keydown', e => {
 });
 
 show('home');
+$$('.ai-btn').forEach(b => b.addEventListener('click', runAI));
+Cloud.init();

@@ -94,7 +94,7 @@ function pullStitchCount(text) {
 
 const RE_EN = /^\s*(?:rnds?|rounds?|rows?|r)\s*\.?\s*(\d+)(?:\s*(?:-|–|—|to|through)\s*(\d+))?\s*[:.)\-–]?\s*(.*)$/i;
 const RE_ZH = /^\s*第?\s*(\d+)\s*(?:[-–—~～至到]\s*第?\s*(\d+))?\s*[圈行轮]\s*[:：.、]?\s*(.*)$/;
-const RE_PIPE = /^\s*(\d+)\s*\|\s*([^|]*?)\s*(?:\|\s*(\d*)\s*)?$/;
+const RE_PIPE = /^\s*(\d+)\s*\|\s*([^|]*?)\s*(?:\|\s*(\d*)\s*)?(?:\|\s*(.*?)\s*)?$/;
 const RE_REP_EN = /^\s*rep(?:eat)?\s+(?:rnds?|rows?|rounds?)\s*(\d+)\s*(?:-|–|—|to|through|and)\s*(\d+)\s*(?:(\d+)|once|twice|three|four|five)?\s*(more)?\s*(?:times?)?/i;
 const RE_REP_ZH = /重复\s*第?\s*(\d+)\s*[-–—~～至到]\s*第?\s*(\d+)\s*[圈行轮]\s*(再|共)?\s*(\d+)\s*(?:次|遍)/;
 const WORDNUM = { once: 1, twice: 2, three: 3, four: 4, five: 5 };
@@ -139,6 +139,7 @@ function parsePattern(input, { partOf, defaultPart, doTranslate }) {
     if ((m = line.match(RE_PIPE))) {
       const p = pullStitchCount(m[2]);
       addRow(+m[1], p.text, m[3] ? +m[3] : p.sts);
+      if (m[4]) rows[rows.length - 1].note = m[4];
       continue;
     }
 

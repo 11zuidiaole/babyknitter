@@ -189,3 +189,8 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
 .img-view { max-height: calc(94vh - 60px); overflow: auto; background: var(--bg); }
 .img-view img { display: block; width: 100%; height: auto; }
 .img-view.zoom img { width: 200%; max-width: none; }
+
+.cloud-status { margin-top: 10px; line-height: 1.7; }
+.ai-btn:disabled { opacity: .6; cursor: wait; }
+#aiStatus:empty { display: none; }
+#aiStatus { color: var(--accent); }

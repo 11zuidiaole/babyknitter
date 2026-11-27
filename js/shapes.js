@@ -104,7 +104,7 @@ function sliceBox(box, dir, n) {
 // 画图：返回一个 update(done) 函数，用来刷新高亮
 function buildDiagram(container, shapeKey, rows) {
   container.innerHTML = '';
-  const shape = SHAPES[shapeKey] || SHAPES.none;
+  const shape = (shapeKey && typeof shapeKey === 'object') ? shapeKey : (SHAPES[shapeKey] || SHAPES.none);
   const rects = new Array(rows.length);
 
   if (!shape.viewBox) return buildBars(container, rows);
