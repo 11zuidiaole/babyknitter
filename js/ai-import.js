@@ -115,7 +115,8 @@ async function runAI(e) {
   tick();
   const timer = setInterval(tick, 1000);
   try {
-    const images = imgs.map(u => ({ type: 'image/jpeg', data: u.split(',')[1] }));
+    const images = [];
+    for (const u of imgs) images.push({ type: 'image/jpeg', data: (await shrinkDataUrl(u, 1400, 0.78)).split(',')[1] });
     const d = await Promise.race([
       Cloud.ai(buildAIPrompt(text), images),
       new Promise((_, rej) => setTimeout(() => rej(new Error('等了 3 分钟还没读完，先停了。截图少传几张再试试。')), 180000)),

@@ -144,7 +144,8 @@ function setSrc(s) {
   $$('#srcTabs button').forEach(b => b.classList.toggle('on', b.dataset.src === s));
   $$('.src').forEach(d => d.hidden = d.dataset.src !== s);
   const showSecs = s === 'sections' || (s === 'ai' && aiDone);
-  $('#imgField').hidden = !(s === 'ai' || s === 'count');
+  $('#imgField').hidden = s !== 'ai';
+  $('#saveProject').hidden = s === 'ai' && !aiDone;
   $('#aiRow').hidden = s !== 'ai';
   $('#aiStatus').hidden = s !== 'ai';
   $('#imgFieldLabel').textContent = s === 'ai' ? '图解截图（可以多张，一次最多读 8 张）' : '图解截图（可以不传，织的时候方便对照）';
@@ -196,9 +197,27 @@ function xBtn(label, fn) {
 
 function renderSections() {
   const box = $('#sectionList');
-  box.innerHTML = `<div class="sec-row head"><span>部位</span><span>圈数</span><span>做法</span><span>织完针数</span><span></span></div>`;
+  box.innerHTML = cSections.some(x => x._open && x.type !== 'group') ? `<div class="sec-row head"><span>部位</span><span>圈数</span><span>做法</span><span>织完针数</span><span></span></div>` : '';
   cSections.forEach((s, i) => {
     const del = () => { cSections.splice(i, 1); touched(); renderSections(); };
+    if (!s._open) {
+      // 收起时只显示一行摘要，点一下展开修改
+      const d = document.createElement('div');
+      d.className = 'sec-sum' + (s.flag ? ' flag' : '');
+      let txt;
+      if (s.type === 'group') {
+        const ch = s.rows.reduce((a, r) => a + (+r.change || 0), 0) * (+s.times || 0);
+        const range = s.start !== '' && s.start != null && !isNaN(+s.start) ? ` · ${s.start}→${+s.start + ch}针` : '';
+        txt = `<b>${esc(s.part)}</b> · ${s.rows.length}圈一组 × ${esc(s.times)}${range}<div class="sum-t">${s.rows.map(r => esc(r.text)).join(' / ')}</div>`;
+      } else {
+        txt = `<b>${esc(s.part)}</b> · ${esc(s.count)}圈${s.sts !== '' && s.sts != null ? ` · → ${esc(s.sts)}针` : ''}<div class="sum-t">${esc(s.text)}</div>`;
+      }
+      d.innerHTML = `<div class="sum-main"><span class="sum-n">${i + 1}</span><div>${txt}${s.note ? `<div class="sum-note">${esc(s.note)}</div>` : ''}</div><span class="sum-edit">改</span></div>`;
+      d.addEventListener('click', () => { s._open = true; renderSections(); });
+      box.appendChild(d);
+      return;
+    }
+    const closeBtn = () => { const b = document.createElement('button'); b.className = 'link sec-close'; b.textContent = '收起'; b.addEventListener('click', () => { s._open = false; renderSections(); }); return b; };
     if (s.type === 'group') {
       const g = document.createElement('div');
       g.className = 'grp' + (s.flag ? ' flag' : '');
@@ -206,6 +225,7 @@ function renderSections() {
       head.className = 'grp-head';
       head.appendChild(partSelect(s));
       head.insertAdjacentHTML('beforeend', `<span>下面 ${s.rows.length} 圈一组，重复</span><input type="number" min="1" class="g-times" value="${esc(s.times)}"><span>次，开始时</span><input type="number" class="g-start" placeholder="针数" value="${esc(s.start ?? '')}"><span>针</span>`);
+      head.appendChild(closeBtn());
       head.appendChild(xBtn('删掉这组', del));
       head.querySelector('.g-times').addEventListener('input', e => { s.times = e.target.value; touched(); foot(); });
       head.querySelector('.g-start').addEventListener('input', e => { s.start = e.target.value; touched(); foot(); });
@@ -244,17 +264,19 @@ function renderSections() {
     row.querySelector('.s-sts').addEventListener('input', e => { s.sts = e.target.value; touched(); });
     row.appendChild(xBtn('删掉这段', del));
     box.appendChild(row);
+    const cb = closeBtn(); cb.style.display = 'block'; cb.style.margin = '-2px 0 10px auto';
+    box.appendChild(cb);
     if (s.note) box.insertAdjacentHTML('beforeend', `<div class="hint ${s.flag ? 'warn' : ''}" style="margin:-4px 0 8px;font-size:13px;${s.flag ? 'color:var(--danger)' : ''}">↑ ${esc(s.note)}</div>`);
   });
   $('#secTotal').textContent = $('#secArea').hidden ? '' : totalText();
 }
 const lastPart = () => (cSections[cSections.length - 1] || {}).part || SHAPES[cShape].parts[0].name;
 $('#addSection').addEventListener('click', () => {
-  cSections.push({ type: 'plain', part: lastPart(), count: 10, text: '全部下针', sts: '' });
+  cSections.push({ type: 'plain', part: lastPart(), count: 10, text: '全部下针', sts: '', _open: true });
   touched(); renderSections();
 });
 $('#addGroup').addEventListener('click', () => {
-  cSections.push({ type: 'group', part: lastPart(), times: 4, start: '', rows: [{ text: '全部下针', change: 0 }, { text: '全部下针', change: 0 }, { text: '两侧各加1针', change: 2 }] });
+  cSections.push({ type: 'group', _open: true, part: lastPart(), times: 4, start: '', rows: [{ text: '全部下针', change: 0 }, { text: '全部下针', change: 0 }, { text: '两侧各加1针', change: 2 }] });
   touched(); renderSections();
 });
 

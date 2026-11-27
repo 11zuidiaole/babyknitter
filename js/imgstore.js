@@ -50,3 +50,22 @@ function compressImage(file, max = 1800) {
     fr.readAsDataURL(file);
   });
 }
+
+// 发给 AI 前再压小一点，手机流量下传得快
+function shrinkDataUrl(url, max, q) {
+  return new Promise(res => {
+    const im = new Image();
+    im.onload = () => {
+      const k = Math.min(1, max / Math.max(im.width, im.height));
+      if (k === 1 && q >= 0.85) return res(url);
+      const c = document.createElement('canvas');
+      c.width = Math.round(im.width * k); c.height = Math.round(im.height * k);
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+      ctx.drawImage(im, 0, 0, c.width, c.height);
+      res(c.toDataURL('image/jpeg', q));
+    };
+    im.onerror = () => res(url);
+    im.src = url;
+  });
+}

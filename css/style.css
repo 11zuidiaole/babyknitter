@@ -227,3 +227,20 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
 .ar-sec.cur > summary { background: color-mix(in srgb, var(--cur) 30%, transparent); }
 .ar-sec.done > summary .t { color: var(--muted); }
 .ar-sec .ar-row { padding-left: 24px; font-size: 14px; }
+
+.sec-sum { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; cursor: pointer; background: var(--bg); }
+.sec-sum:hover { border-color: var(--accent); }
+.sec-sum.flag { border-color: var(--danger); }
+.sum-main { display: flex; gap: 10px; align-items: flex-start; font-size: 15px; line-height: 1.5; }
+.sum-main > div { flex: 1; min-width: 0; }
+.sum-n { color: var(--muted); font-size: 13px; min-width: 18px; padding-top: 2px; }
+.sum-t { color: var(--ink); margin-top: 2px; }
+.sum-main b { font-weight: 600; }
+.sum-note { color: var(--danger); font-size: 13px; margin-top: 2px; }
+.sum-edit { color: var(--accent); font-size: 14px; white-space: nowrap; }
+.sec-close { font-size: 14px; }
+.grp-head .sec-close { margin-left: auto; }
+.grp-head .sec-close + .x { margin-left: 0; }
+@media (max-width: 760px) { .tabs button { padding: 8px 10px; white-space: nowrap; font-size: 14px; } .tabs { max-width: 100%; } }
+
+@media (max-width: 600px) { .grp-head .x { margin-left: auto; } .grp-row { grid-template-columns: 20px 1fr 64px 24px; } }
