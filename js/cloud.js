@@ -169,7 +169,7 @@ const Cloud = (() => {
   // ---- AI ----
   async function ai(prompt, images) {
     if (!user) throw new Error('需要先登录');
-    const { data: d, error } = await sb.functions.invoke(AI_FN, { body: { prompt, images, max_tokens: 8000, model: 'claude-sonnet-5-5' } });
+    const { data: d, error } = await sb.functions.invoke(AI_FN, { body: { prompt, images, max_tokens: 16000, model: 'claude-sonnet-5-5' } });
     if (error) {
       let msg = error.message || '', status = error.context && error.context.status;
       try { const j = await error.context.json(); msg = j.error || msg; } catch {}
